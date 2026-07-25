@@ -1,9 +1,8 @@
 //! `cypher-rs` - openCypher front-end in Rust.
 //!
-//! Pre-v0. Parses a subset of openCypher: `MATCH`, `WHERE`, `RETURN`,
-//! `LIMIT`, `SKIP` plus expressions (literals, variables, property
-//! access, parameters, comparisons, boolean and arithmetic operators,
-//! parenthesized sub-expressions).
+//! Pre-v0. Parses a subset of openCypher including read clauses (`MATCH`,
+//! `WHERE`, `RETURN`, `WITH`, ordering and pagination) and update clauses
+//! (`CREATE`, `MERGE`, `SET`, `DELETE`, `UNWIND`), plus common expressions.
 //!
 //! ```
 //! use cypher_rs::parse;

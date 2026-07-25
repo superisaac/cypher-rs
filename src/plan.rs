@@ -92,6 +92,8 @@ pub enum PlanError {
     EmptyQuery,
     /// `OPTIONAL MATCH` requires a prior plan to attach to.
     OptionalMatchWithoutAnchor,
+    /// The parser supports the clause, but the read-only logical planner does not.
+    UnsupportedClause(&'static str),
 }
 
 impl fmt::Display for PlanError {
@@ -100,6 +102,9 @@ impl fmt::Display for PlanError {
             PlanError::EmptyQuery => f.write_str("plan: empty query"),
             PlanError::OptionalMatchWithoutAnchor => {
                 f.write_str("plan: OPTIONAL MATCH must follow at least one regular MATCH clause")
+            }
+            PlanError::UnsupportedClause(clause) => {
+                write!(f, "plan: {clause} clauses are not supported")
             }
         }
     }
@@ -192,6 +197,11 @@ pub fn plan(query: &Query) -> Result<Plan, PlanError> {
             }
             Clause::Skip(e) => skip = Some(e.clone()),
             Clause::Limit(e) => limit = Some(e.clone()),
+            Clause::Create(_) => return Err(PlanError::UnsupportedClause("CREATE")),
+            Clause::Merge(_) => return Err(PlanError::UnsupportedClause("MERGE")),
+            Clause::Set(_) => return Err(PlanError::UnsupportedClause("SET")),
+            Clause::Delete(_) => return Err(PlanError::UnsupportedClause("DELETE")),
+            Clause::Unwind(_) => return Err(PlanError::UnsupportedClause("UNWIND")),
         }
     }
 

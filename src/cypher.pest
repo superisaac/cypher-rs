@@ -2,7 +2,8 @@
 // v0.2: OPTIONAL MATCH, ORDER BY, list literals, IN;
 // v0.11: WITH clause;
 // v0.12: STARTS WITH, ENDS WITH, CONTAINS string predicates;
-// v0.14: RETURN DISTINCT / WITH DISTINCT).
+// v0.14: RETURN DISTINCT / WITH DISTINCT;
+// update clauses: CREATE, MERGE, SET, DELETE, UNWIND).
 //
 // Whitespace is skipped between non-atomic rules. Atomic rules
 // (those marked `@`) preserve internal whitespace.
@@ -40,6 +41,13 @@ kw_starts    = @{ ^"STARTS"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_ends      = @{ ^"ENDS"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_contains  = @{ ^"CONTAINS" ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_distinct  = @{ ^"DISTINCT" ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_create    = @{ ^"CREATE"    ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_merge     = @{ ^"MERGE"     ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_set       = @{ ^"SET"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_delete    = @{ ^"DELETE"    ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_detach    = @{ ^"DETACH"    ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_unwind    = @{ ^"UNWIND"    ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_on        = @{ ^"ON"        ~ !(ASCII_ALPHANUMERIC | "_") }
 
 reserved_kw = _{
     kw_match | kw_optional | kw_where | kw_return | kw_as
@@ -48,6 +56,7 @@ reserved_kw = _{
     | kw_and | kw_or | kw_not | kw_in
     | kw_true | kw_false | kw_null | kw_is
     | kw_starts | kw_ends | kw_contains | kw_distinct
+    | kw_create | kw_merge | kw_set | kw_delete | kw_detach | kw_unwind | kw_on
 }
 
 ident = @{
@@ -58,7 +67,7 @@ ident = @{
 
 query = { SOI ~ clause+ ~ EOI }
 
-clause = _{ match_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
+clause = _{ match_clause | create_clause | merge_clause | set_clause | delete_clause | unwind_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
 
 match_clause     = { optional_kw? ~ kw_match ~ pattern_list }
 optional_kw      = { kw_optional }
@@ -68,6 +77,15 @@ return_clause    = { kw_return ~ return_items }
 order_by_clause  = { kw_order ~ kw_by ~ order_items }
 limit_clause     = { kw_limit ~ expr }
 skip_clause      = { kw_skip ~ expr }
+create_clause    = { kw_create ~ pattern_list }
+merge_clause     = { kw_merge ~ pattern ~ merge_action* }
+merge_action     = { kw_on ~ merge_action_kind ~ kw_set ~ set_items }
+merge_action_kind = { kw_match | kw_create }
+set_clause       = { kw_set ~ set_items }
+delete_clause    = { kw_detach? ~ kw_delete ~ expression_list }
+unwind_clause    = { kw_unwind ~ expr ~ kw_as ~ ident }
+
+expression_list = { expr ~ ("," ~ expr)* }
 
 order_items = { order_item ~ ("," ~ order_item)* }
 order_item  = { expr ~ order_dir? }
@@ -89,6 +107,16 @@ rel_right      = { "-" ~ rel_detail? ~ "->" }
 rel_undirected = { "-" ~ rel_detail? ~ "-" }
 rel_detail     = { "[" ~ ident? ~ rel_types? ~ map_literal? ~ "]" }
 rel_types      = { ":" ~ ident ~ ("|" ~ ident)* }
+
+// --- updates ----------------------------------------------------------
+
+set_items          = { set_item ~ ("," ~ set_item)* }
+set_item           = { set_property | set_all_properties | merge_properties | set_labels }
+set_property       = { property_target ~ "=" ~ expr }
+set_all_properties = { ident ~ "=" ~ expr }
+merge_properties   = { ident ~ "+=" ~ expr }
+set_labels         = { ident ~ label+ }
+property_target    = { var_ref ~ prop_access+ }
 
 // --- return -----------------------------------------------------------
 

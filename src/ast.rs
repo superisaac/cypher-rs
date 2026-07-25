@@ -8,6 +8,11 @@ pub struct Query {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Clause {
     Match(MatchClause),
+    Create(CreateClause),
+    Merge(MergeClause),
+    Set(SetClause),
+    Delete(DeleteClause),
+    Unwind(UnwindClause),
     Where(Expr),
     Return(ReturnClause),
     /// Pipeline break: project the current row set and pass it to the
@@ -16,6 +21,66 @@ pub enum Clause {
     OrderBy(Vec<OrderItem>),
     Limit(Expr),
     Skip(Expr),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateClause {
+    pub patterns: Vec<Pattern>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MergeClause {
+    pub pattern: Pattern,
+    pub actions: Vec<MergeAction>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MergeAction {
+    pub kind: MergeActionKind,
+    pub items: Vec<SetItem>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeActionKind {
+    OnMatch,
+    OnCreate,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetClause {
+    pub items: Vec<SetItem>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SetItem {
+    Property {
+        property: Expr,
+        value: Expr,
+    },
+    AllProperties {
+        variable: String,
+        value: Expr,
+    },
+    MergeProperties {
+        variable: String,
+        value: Expr,
+    },
+    Labels {
+        variable: String,
+        labels: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeleteClause {
+    pub detach: bool,
+    pub expressions: Vec<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnwindClause {
+    pub expr: Expr,
+    pub alias: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

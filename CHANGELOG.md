@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Parser and AST support for `CREATE`, `MERGE` with `ON CREATE`/`ON MATCH`
+  actions, all four `SET` item forms, `DELETE`/`DETACH DELETE`, and `UNWIND`.
+- Semantic checks for expressions and bindings in the new clauses. The
+  read-only logical planner reports them as unsupported instead of producing
+  an incomplete plan.
 - MCP (Model Context Protocol) server: new `cypher-mcp` binary and
   `pub mod mcp` module gated behind a new `mcp` Cargo feature.
   Library users keep the lean dep tree (no `serde_json`); MCP users

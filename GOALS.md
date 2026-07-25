@@ -7,7 +7,7 @@ server-side graph DB project that doesn't want to carry libcypher-parser.
 ## v0 success criteria
 - Lexer + parser handle: MATCH ✅, OPTIONAL MATCH ✅, WHERE ✅,
   RETURN ✅, ORDER BY ✅, LIMIT ✅, SKIP ✅, list literals ✅, IN ✅,
-  CREATE / MERGE / SET / DELETE / UNWIND (pending)
+  CREATE ✅, MERGE ✅, SET ✅, DELETE ✅, UNWIND ✅
 - Parses 1k random TCK queries without panicking (pending)
 - AST is documented and stable (✅ for v0.2 surface)
 - Semantic analyzer: variable binding ✅, scope check ✅, schema-aware

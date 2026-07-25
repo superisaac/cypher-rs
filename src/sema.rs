@@ -95,12 +95,17 @@ fn collect_bindings(query: &Query, out: &mut HashSet<String>) {
         match clause {
             Clause::Match(m) => {
                 for p in &m.patterns {
-                    add_node_binding(&p.anchor, out);
-                    for chain in &p.chain {
-                        add_rel_binding(&chain.rel, out);
-                        add_node_binding(&chain.node, out);
-                    }
+                    add_pattern_bindings(p, out);
                 }
+            }
+            Clause::Create(c) => {
+                for p in &c.patterns {
+                    add_pattern_bindings(p, out);
+                }
+            }
+            Clause::Merge(m) => add_pattern_bindings(&m.pattern, out),
+            Clause::Unwind(u) => {
+                out.insert(u.alias.clone());
             }
             Clause::With(w) => {
                 for item in &w.items {
@@ -111,6 +116,14 @@ fn collect_bindings(query: &Query, out: &mut HashSet<String>) {
             }
             _ => {}
         }
+    }
+}
+
+fn add_pattern_bindings(pattern: &Pattern, out: &mut HashSet<String>) {
+    add_node_binding(&pattern.anchor, out);
+    for chain in &pattern.chain {
+        add_rel_binding(&chain.rel, out);
+        add_node_binding(&chain.node, out);
     }
 }
 
@@ -135,13 +148,27 @@ fn check_clause<S: Schema + ?Sized>(
     match clause {
         Clause::Match(m) => {
             for p in &m.patterns {
-                check_node_pattern(&p.anchor, schema, issues);
-                for chain in &p.chain {
-                    check_rel_pattern(&chain.rel, schema, issues);
-                    check_node_pattern(&chain.node, schema, issues);
-                }
+                check_pattern(p, bindings, schema, issues);
             }
         }
+        Clause::Create(c) => {
+            for p in &c.patterns {
+                check_pattern(p, bindings, schema, issues);
+            }
+        }
+        Clause::Merge(m) => {
+            check_pattern(&m.pattern, bindings, schema, issues);
+            for action in &m.actions {
+                check_set_items(&action.items, bindings, schema, issues);
+            }
+        }
+        Clause::Set(s) => check_set_items(&s.items, bindings, schema, issues),
+        Clause::Delete(d) => {
+            for expr in &d.expressions {
+                check_expr(expr, bindings, issues);
+            }
+        }
+        Clause::Unwind(u) => check_expr(&u.expr, bindings, issues),
         Clause::Where(e) => check_expr(e, bindings, issues),
         Clause::Return(r) | Clause::With(r) => {
             for item in &r.items {
@@ -157,7 +184,58 @@ fn check_clause<S: Schema + ?Sized>(
     }
 }
 
-fn check_node_pattern<S: Schema + ?Sized>(n: &NodePattern, schema: &S, issues: &mut Vec<SemIssue>) {
+fn check_pattern<S: Schema + ?Sized>(
+    pattern: &Pattern,
+    bindings: &HashSet<String>,
+    schema: &S,
+    issues: &mut Vec<SemIssue>,
+) {
+    check_node_pattern(&pattern.anchor, bindings, schema, issues);
+    for chain in &pattern.chain {
+        check_rel_pattern(&chain.rel, bindings, schema, issues);
+        check_node_pattern(&chain.node, bindings, schema, issues);
+    }
+}
+
+fn check_set_items<S: Schema + ?Sized>(
+    items: &[SetItem],
+    bindings: &HashSet<String>,
+    schema: &S,
+    issues: &mut Vec<SemIssue>,
+) {
+    for item in items {
+        match item {
+            SetItem::Property { property, value } => {
+                check_expr(property, bindings, issues);
+                check_expr(value, bindings, issues);
+            }
+            SetItem::AllProperties { variable, value }
+            | SetItem::MergeProperties { variable, value } => {
+                check_expr(&Expr::Variable(variable.clone()), bindings, issues);
+                check_expr(value, bindings, issues);
+            }
+            SetItem::Labels { variable, labels } => {
+                check_expr(&Expr::Variable(variable.clone()), bindings, issues);
+                for label in labels {
+                    if !schema.has_label(label) {
+                        issues.push(SemIssue {
+                            severity: SemSeverity::Error,
+                            code: "unknown-label",
+                            message: format!("unknown label `{label}`"),
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn check_node_pattern<S: Schema + ?Sized>(
+    n: &NodePattern,
+    bindings: &HashSet<String>,
+    schema: &S,
+    issues: &mut Vec<SemIssue>,
+) {
     for label in &n.labels {
         if !schema.has_label(label) {
             issues.push(SemIssue {
@@ -167,9 +245,17 @@ fn check_node_pattern<S: Schema + ?Sized>(n: &NodePattern, schema: &S, issues: &
             });
         }
     }
+    for (_, value) in &n.properties {
+        check_expr(value, bindings, issues);
+    }
 }
 
-fn check_rel_pattern<S: Schema + ?Sized>(r: &RelPattern, schema: &S, issues: &mut Vec<SemIssue>) {
+fn check_rel_pattern<S: Schema + ?Sized>(
+    r: &RelPattern,
+    bindings: &HashSet<String>,
+    schema: &S,
+    issues: &mut Vec<SemIssue>,
+) {
     for ty in &r.types {
         if !schema.has_rel_type(ty) {
             issues.push(SemIssue {
@@ -178,6 +264,9 @@ fn check_rel_pattern<S: Schema + ?Sized>(r: &RelPattern, schema: &S, issues: &mu
                 message: format!("unknown relationship type `{ty}`"),
             });
         }
+    }
+    for (_, value) in &r.properties {
+        check_expr(value, bindings, issues);
     }
 }
 

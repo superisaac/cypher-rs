@@ -31,7 +31,7 @@ What's missing is a pure-Rust, library-grade, MIT-licensed Cypher front-end with
 | Stage | What | Status |
 |---|---|---|
 | Lexer | tokens for openCypher 9 grammar | partial (v0.2) |
-| Parser | concrete syntax tree | partial (v0.2: MATCH/OPTIONAL MATCH/WHERE/RETURN/ORDER BY/LIMIT/SKIP, list literals, IN) |
+| Parser | concrete syntax tree | partial (MATCH/OPTIONAL MATCH/WHERE/WITH/RETURN/ORDER BY/LIMIT/SKIP plus CREATE/MERGE/SET/DELETE/UNWIND) |
 | AST lowering | symbol table, variable binding | partial (v0.3) |
 | Semantic analysis | scope / label / rel-type checks | partial (v0.3 - type checks deferred) |
 | Logical plan | algebra: scan · expand · filter · project · agg | partial (v0.4-v0.5) |
@@ -260,6 +260,7 @@ backend-specific) are not.
 - [x] v0.8 - map literals (`{key: value}`) as expressions and as node/rel pattern properties; planner desugars pattern-property maps into Filter operators
 - [x] v0.9 - anonymous rel-binding synthesis (patterns like `(:User {id: 1})` and `[:KNOWS {since: 2020}]` now lower to a Filter against an internal `__node_N` / `__rel_N` binding instead of dropping the predicate). Projection pruning (column-set tracking) deferred to v0.10.
 - [x] v0.10 - projection pruning analysis (`output_columns(plan)` + `required_input_columns(plan, outer_demand)` for column-set tracking; pure analysis, no plan-tree changes; executors use it to materialize only referenced bindings). `cypher-rs-sled` integration crate deferred to v0.11.
+- [x] Update-clause parsing - `CREATE`, `MERGE` with `ON CREATE`/`ON MATCH`, all `SET` item forms, `DELETE`/`DETACH DELETE`, and `UNWIND`
 - [ ] v1.0 - openCypher TCK ≥ 95%; used in FFS
 
 ## ✦ Topics

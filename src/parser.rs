@@ -23,6 +23,11 @@ pub fn parse(input: &str) -> Result<Query, ParseError> {
         match inner.as_rule() {
             Rule::EOI => continue,
             Rule::match_clause => clauses.push(Clause::Match(walk_match(inner)?)),
+            Rule::create_clause => clauses.push(Clause::Create(walk_create(inner)?)),
+            Rule::merge_clause => clauses.push(Clause::Merge(walk_merge(inner)?)),
+            Rule::set_clause => clauses.push(Clause::Set(walk_set(inner)?)),
+            Rule::delete_clause => clauses.push(Clause::Delete(walk_delete(inner)?)),
+            Rule::unwind_clause => clauses.push(Clause::Unwind(walk_unwind(inner)?)),
             Rule::where_clause => clauses.push(Clause::Where(walk_clause_expr(inner)?)),
             Rule::with_clause => clauses.push(Clause::With(walk_return(inner)?)),
             Rule::return_clause => clauses.push(Clause::Return(walk_return(inner)?)),
@@ -40,6 +45,171 @@ pub fn parse(input: &str) -> Result<Query, ParseError> {
 fn walk_clause_expr(pair: Pair<Rule>) -> Result<Expr, ParseError> {
     let inner = first_operand(pair, "clause expr")?;
     walk_expr(inner)
+}
+
+fn walk_create(pair: Pair<Rule>) -> Result<CreateClause, ParseError> {
+    let pattern_list = pair
+        .into_inner()
+        .find(|p| p.as_rule() == Rule::pattern_list)
+        .ok_or_else(|| ParseError::Unexpected("create: missing pattern list".into()))?;
+    let patterns = pattern_list
+        .into_inner()
+        .map(walk_pattern)
+        .collect::<Result<_, _>>()?;
+    Ok(CreateClause { patterns })
+}
+
+fn walk_merge(pair: Pair<Rule>) -> Result<MergeClause, ParseError> {
+    let mut pattern = None;
+    let mut actions = Vec::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::pattern => pattern = Some(walk_pattern(inner)?),
+            Rule::merge_action => actions.push(walk_merge_action(inner)?),
+            _ => {}
+        }
+    }
+    Ok(MergeClause {
+        pattern: pattern.ok_or_else(|| ParseError::Unexpected("merge: missing pattern".into()))?,
+        actions,
+    })
+}
+
+fn walk_merge_action(pair: Pair<Rule>) -> Result<MergeAction, ParseError> {
+    let mut kind = None;
+    let mut items = None;
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::merge_action_kind => {
+                kind = Some(if inner.as_str().eq_ignore_ascii_case("MATCH") {
+                    MergeActionKind::OnMatch
+                } else {
+                    MergeActionKind::OnCreate
+                });
+            }
+            Rule::set_items => items = Some(walk_set_items(inner)?),
+            _ => {}
+        }
+    }
+    Ok(MergeAction {
+        kind: kind.ok_or_else(|| ParseError::Unexpected("merge action: missing kind".into()))?,
+        items: items.ok_or_else(|| ParseError::Unexpected("merge action: missing SET".into()))?,
+    })
+}
+
+fn walk_set(pair: Pair<Rule>) -> Result<SetClause, ParseError> {
+    let items = pair
+        .into_inner()
+        .find(|p| p.as_rule() == Rule::set_items)
+        .ok_or_else(|| ParseError::Unexpected("set: missing items".into()))?;
+    Ok(SetClause {
+        items: walk_set_items(items)?,
+    })
+}
+
+fn walk_set_items(pair: Pair<Rule>) -> Result<Vec<SetItem>, ParseError> {
+    pair.into_inner().map(walk_set_item).collect()
+}
+
+fn walk_set_item(pair: Pair<Rule>) -> Result<SetItem, ParseError> {
+    let item = first_inner(pair, "set item")?;
+    let rule = item.as_rule();
+    let mut inner = item.into_inner();
+    match rule {
+        Rule::set_property => {
+            let property =
+                walk_property_target(inner.next().ok_or_else(|| {
+                    ParseError::Unexpected("set property: missing target".into())
+                })?)?;
+            let value =
+                walk_expr(inner.next().ok_or_else(|| {
+                    ParseError::Unexpected("set property: missing value".into())
+                })?)?;
+            Ok(SetItem::Property { property, value })
+        }
+        Rule::set_all_properties | Rule::merge_properties => {
+            let variable = inner
+                .next()
+                .ok_or_else(|| ParseError::Unexpected("set map: missing variable".into()))?
+                .as_str()
+                .to_string();
+            let value = walk_expr(
+                inner
+                    .next()
+                    .ok_or_else(|| ParseError::Unexpected("set map: missing value".into()))?,
+            )?;
+            if rule == Rule::set_all_properties {
+                Ok(SetItem::AllProperties { variable, value })
+            } else {
+                Ok(SetItem::MergeProperties { variable, value })
+            }
+        }
+        Rule::set_labels => {
+            let variable = inner
+                .next()
+                .ok_or_else(|| ParseError::Unexpected("set labels: missing variable".into()))?
+                .as_str()
+                .to_string();
+            let labels = inner
+                .map(|label| label.as_str().trim_start_matches(':').to_string())
+                .collect();
+            Ok(SetItem::Labels { variable, labels })
+        }
+        r => Err(unexpected("set item", r)),
+    }
+}
+
+fn walk_property_target(pair: Pair<Rule>) -> Result<Expr, ParseError> {
+    let mut inner = pair.into_inner();
+    let var = inner
+        .next()
+        .ok_or_else(|| ParseError::Unexpected("property target: missing variable".into()))?;
+    let mut expr = walk_expr(var)?;
+    for access in inner {
+        let key = first_inner(access, "property target access")?;
+        expr = Expr::Property {
+            base: Box::new(expr),
+            key: key.as_str().to_string(),
+        };
+    }
+    Ok(expr)
+}
+
+fn walk_delete(pair: Pair<Rule>) -> Result<DeleteClause, ParseError> {
+    let mut detach = false;
+    let mut expressions = Vec::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::kw_detach => detach = true,
+            Rule::expression_list => {
+                expressions = inner
+                    .into_inner()
+                    .map(walk_expr)
+                    .collect::<Result<_, _>>()?;
+            }
+            _ => {}
+        }
+    }
+    Ok(DeleteClause {
+        detach,
+        expressions,
+    })
+}
+
+fn walk_unwind(pair: Pair<Rule>) -> Result<UnwindClause, ParseError> {
+    let mut expr = None;
+    let mut alias = None;
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::expr => expr = Some(walk_expr(inner)?),
+            Rule::ident => alias = Some(inner.as_str().to_string()),
+            _ => {}
+        }
+    }
+    Ok(UnwindClause {
+        expr: expr.ok_or_else(|| ParseError::Unexpected("unwind: missing expression".into()))?,
+        alias: alias.ok_or_else(|| ParseError::Unexpected("unwind: missing alias".into()))?,
+    })
 }
 
 fn walk_match(pair: Pair<Rule>) -> Result<MatchClause, ParseError> {
@@ -516,6 +686,13 @@ fn is_kw(p: &Pair<Rule>) -> bool {
             | Rule::kw_ends
             | Rule::kw_contains
             | Rule::kw_distinct
+            | Rule::kw_create
+            | Rule::kw_merge
+            | Rule::kw_set
+            | Rule::kw_delete
+            | Rule::kw_detach
+            | Rule::kw_unwind
+            | Rule::kw_on
     )
 }
 
