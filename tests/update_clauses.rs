@@ -203,6 +203,45 @@ fn planner_supports_remove() {
 }
 
 #[test]
+fn planner_supports_delete_and_detach_delete() {
+    let q = parse("MATCH (n)-[r]-() DELETE r, n").unwrap();
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Delete {
+            detach: false,
+            expressions,
+            ..
+        } if expressions.len() == 2
+    ));
+
+    let q = parse("MATCH (n) DETACH DELETE n").unwrap();
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Delete {
+            detach: true,
+            expressions,
+            ..
+        } if expressions.len() == 1
+    ));
+}
+
+#[test]
+fn planner_supports_unwind() {
+    let q = parse("UNWIND [1, 2, 3] AS value RETURN value").unwrap();
+    let Plan::Project { input, .. } = plan(&q).unwrap() else {
+        panic!("expected Project");
+    };
+    assert!(matches!(
+        input.as_ref(),
+        Plan::Unwind {
+            alias,
+            expression: Expr::List(items),
+            ..
+        } if alias == "value" && items.len() == 3
+    ));
+}
+
+#[test]
 fn analyzes_remove_bindings_and_labels() {
     struct OnlyCurrent;
     impl Schema for OnlyCurrent {

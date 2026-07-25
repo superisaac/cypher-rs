@@ -39,7 +39,13 @@ pub fn output_columns(plan: &Plan) -> HashSet<String> {
 
 fn walk_output(plan: &Plan, out: &mut HashSet<String>) {
     match plan {
-        Plan::Empty => {}
+        Plan::Empty
+        | Plan::CreateIndex { .. }
+        | Plan::DropIndex { .. }
+        | Plan::CreateNodeConstraint { .. }
+        | Plan::CreateRelationshipConstraint { .. }
+        | Plan::DropNodeConstraint { .. }
+        | Plan::DropRelationshipConstraint { .. } => {}
         Plan::Scan { var, .. } => {
             if let Some(v) = var {
                 out.insert(v.clone());
@@ -83,6 +89,16 @@ fn walk_output(plan: &Plan, out: &mut HashSet<String>) {
         }
         Plan::Set { input, .. } => walk_output(input, out),
         Plan::Remove { input, .. } => walk_output(input, out),
+        Plan::Delete { input, .. } => walk_output(input, out),
+        Plan::Unwind { input, alias, .. } => {
+            walk_output(input, out);
+            out.insert(alias.clone());
+        }
+        Plan::Foreach { input, .. } => walk_output(input, out),
+        Plan::Start { input, points, .. } => {
+            walk_output(input, out);
+            out.extend(points.iter().map(|point| point.variable.clone()));
+        }
         Plan::Filter { input, .. }
         | Plan::PropertyMapFilter { input, .. }
         | Plan::Sort { input, .. }
@@ -147,7 +163,14 @@ fn visible_name(e: &ProjectExpr) -> Option<String> {
 /// stripped.
 pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> HashSet<String> {
     match plan {
-        Plan::Empty | Plan::Scan { .. } => HashSet::new(),
+        Plan::Empty
+        | Plan::Scan { .. }
+        | Plan::CreateIndex { .. }
+        | Plan::DropIndex { .. }
+        | Plan::CreateNodeConstraint { .. }
+        | Plan::CreateRelationshipConstraint { .. }
+        | Plan::DropNodeConstraint { .. }
+        | Plan::DropRelationshipConstraint { .. } => HashSet::new(),
         Plan::Filter { pred, .. } => union(outer_demand, &used_vars_expr(pred)),
         Plan::PropertyMapFilter { variable, map, .. } => {
             let mut demand = union(outer_demand, &used_vars_expr(map));
@@ -282,6 +305,65 @@ pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> Ha
             let mut acc = outer_demand.clone();
             for item in items {
                 walk_remove_item_expressions(item, &mut acc);
+            }
+            acc
+        }
+        Plan::Delete { expressions, .. } => {
+            let mut acc = outer_demand.clone();
+            for expression in expressions {
+                walk_expr(expression, &mut acc);
+            }
+            acc
+        }
+        Plan::Unwind {
+            expression, alias, ..
+        } => {
+            let mut acc = outer_demand
+                .iter()
+                .filter(|name| *name != alias)
+                .cloned()
+                .collect::<HashSet<_>>();
+            walk_expr(expression, &mut acc);
+            acc
+        }
+        Plan::Foreach {
+            variable,
+            expression,
+            updates,
+            ..
+        } => {
+            let mut acc = outer_demand.clone();
+            walk_expr(expression, &mut acc);
+            let mut produced = HashSet::new();
+            walk_update_dependencies(updates, &mut acc, &mut produced);
+            acc.remove(variable);
+            for binding in produced {
+                acc.remove(&binding);
+            }
+            acc
+        }
+        Plan::Start {
+            points, predicate, ..
+        } => {
+            let bindings = points
+                .iter()
+                .map(|point| point.variable.as_str())
+                .collect::<HashSet<_>>();
+            let mut acc = outer_demand
+                .iter()
+                .filter(|name| !bindings.contains(name.as_str()))
+                .cloned()
+                .collect::<HashSet<_>>();
+            for point in points {
+                if let StartLookup::Index { value, .. } = &point.lookup {
+                    walk_expr(value, &mut acc);
+                }
+            }
+            if let Some(predicate) = predicate {
+                walk_expr(predicate, &mut acc);
+            }
+            for binding in bindings {
+                acc.remove(binding);
             }
             acc
         }
@@ -543,6 +625,77 @@ fn walk_remove_item_expressions(item: &RemoveItem, out: &mut HashSet<String>) {
         RemoveItem::Labels { variable, .. } => {
             out.insert(variable.clone());
         }
+    }
+}
+
+fn walk_update_dependencies(
+    plan: &Plan,
+    used: &mut HashSet<String>,
+    produced: &mut HashSet<String>,
+) {
+    match plan {
+        Plan::Empty => {}
+        Plan::Create {
+            input, patterns, ..
+        } => {
+            walk_update_dependencies(input, used, produced);
+            for pattern in patterns {
+                walk_pattern_expressions(pattern, used);
+                insert_pattern_bindings(pattern, produced);
+            }
+        }
+        Plan::Merge {
+            input,
+            pattern,
+            actions,
+        } => {
+            walk_update_dependencies(input, used, produced);
+            walk_pattern_expressions(pattern, used);
+            for action in actions {
+                for item in &action.items {
+                    walk_set_item_expressions(item, used);
+                }
+            }
+            insert_pattern_bindings(pattern, produced);
+        }
+        Plan::Set { input, items } => {
+            walk_update_dependencies(input, used, produced);
+            for item in items {
+                walk_set_item_expressions(item, used);
+            }
+        }
+        Plan::Remove { input, items } => {
+            walk_update_dependencies(input, used, produced);
+            for item in items {
+                walk_remove_item_expressions(item, used);
+            }
+        }
+        Plan::Delete {
+            input, expressions, ..
+        } => {
+            walk_update_dependencies(input, used, produced);
+            for expression in expressions {
+                walk_expr(expression, used);
+            }
+        }
+        Plan::Foreach {
+            input,
+            variable,
+            expression,
+            updates,
+        } => {
+            walk_update_dependencies(input, used, produced);
+            walk_expr(expression, used);
+            let mut nested_used = HashSet::new();
+            let mut nested_produced = HashSet::new();
+            walk_update_dependencies(updates, &mut nested_used, &mut nested_produced);
+            nested_used.remove(variable);
+            for binding in nested_produced {
+                nested_used.remove(&binding);
+            }
+            used.extend(nested_used);
+        }
+        _ => {}
     }
 }
 

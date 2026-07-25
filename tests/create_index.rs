@@ -90,10 +90,11 @@ fn semantic_analysis_accepts_schema_commands_without_query_bindings() {
 }
 
 #[test]
-fn planner_reports_create_index_as_unsupported() {
+fn planner_supports_create_index() {
     let query = parse("CREATE INDEX ON :Person(name)").unwrap();
-    assert_eq!(
-        plan(&query),
-        Err(PlanError::UnsupportedClause("CREATE INDEX"))
-    );
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::CreateIndex { label, properties }
+            if label == "Person" && properties == ["name"]
+    ));
 }

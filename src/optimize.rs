@@ -171,6 +171,44 @@ fn descend(plan: Plan) -> Plan {
             input: Box::new(pass(*input)),
             items,
         },
+        Plan::Delete {
+            input,
+            detach,
+            expressions,
+        } => Plan::Delete {
+            input: Box::new(pass(*input)),
+            detach,
+            expressions,
+        },
+        Plan::Unwind {
+            input,
+            expression,
+            alias,
+        } => Plan::Unwind {
+            input: Box::new(pass(*input)),
+            expression,
+            alias,
+        },
+        Plan::Foreach {
+            input,
+            variable,
+            expression,
+            updates,
+        } => Plan::Foreach {
+            input: Box::new(pass(*input)),
+            variable,
+            expression,
+            updates: Box::new(pass(*updates)),
+        },
+        Plan::Start {
+            input,
+            points,
+            predicate,
+        } => Plan::Start {
+            input: Box::new(pass(*input)),
+            points,
+            predicate,
+        },
         Plan::PeriodicCommit { input, limit } => Plan::PeriodicCommit {
             input: Box::new(pass(*input)),
             limit,
@@ -189,7 +227,14 @@ fn descend(plan: Plan) -> Plan {
             right: Box::new(pass(*right)),
             all,
         },
-        leaf @ (Plan::Empty | Plan::Scan { .. }) => leaf,
+        leaf @ (Plan::Empty
+        | Plan::Scan { .. }
+        | Plan::CreateIndex { .. }
+        | Plan::DropIndex { .. }
+        | Plan::CreateNodeConstraint { .. }
+        | Plan::CreateRelationshipConstraint { .. }
+        | Plan::DropNodeConstraint { .. }
+        | Plan::DropRelationshipConstraint { .. }) => leaf,
     }
 }
 
@@ -608,7 +653,13 @@ fn bound_vars(plan: &Plan) -> HashSet<String> {
 
 fn walk_bound(plan: &Plan, out: &mut HashSet<String>) {
     match plan {
-        Plan::Empty => {}
+        Plan::Empty
+        | Plan::CreateIndex { .. }
+        | Plan::DropIndex { .. }
+        | Plan::CreateNodeConstraint { .. }
+        | Plan::CreateRelationshipConstraint { .. }
+        | Plan::DropNodeConstraint { .. }
+        | Plan::DropRelationshipConstraint { .. } => {}
         Plan::Scan { var, .. } => {
             if let Some(v) = var {
                 out.insert(v.clone());
@@ -688,6 +739,16 @@ fn walk_bound(plan: &Plan, out: &mut HashSet<String>) {
         }
         Plan::Set { input, .. } => walk_bound(input, out),
         Plan::Remove { input, .. } => walk_bound(input, out),
+        Plan::Delete { input, .. } => walk_bound(input, out),
+        Plan::Unwind { input, alias, .. } => {
+            walk_bound(input, out);
+            out.insert(alias.clone());
+        }
+        Plan::Foreach { input, .. } => walk_bound(input, out),
+        Plan::Start { input, points, .. } => {
+            walk_bound(input, out);
+            out.extend(points.iter().map(|point| point.variable.clone()));
+        }
         Plan::PeriodicCommit { input, .. } => walk_bound(input, out),
         Plan::Explain { input } => walk_bound(input, out),
         Plan::Profile { input } => walk_bound(input, out),

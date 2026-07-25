@@ -135,15 +135,16 @@ fn semantic_analysis_uses_the_constraint_target_scope() {
 }
 
 #[test]
-fn planner_reports_drop_constraint_as_unsupported() {
-    for source in [
-        "DROP CONSTRAINT ON (f:Foo) ASSERT f.bar IS UNIQUE",
-        "DROP CONSTRAINT ON ()-[r:KNOWS]-() ASSERT exists(r.since)",
-    ] {
-        let query = parse(source).unwrap();
-        assert_eq!(
-            plan(&query),
-            Err(PlanError::UnsupportedClause("DROP CONSTRAINT"))
-        );
-    }
+fn planner_supports_drop_constraint() {
+    let query = parse("DROP CONSTRAINT ON (f:Foo) ASSERT f.bar IS UNIQUE").unwrap();
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::DropNodeConstraint { unique: true, .. }
+    ));
+
+    let query = parse("DROP CONSTRAINT ON ()-[r:KNOWS]-() ASSERT exists(r.since)").unwrap();
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::DropRelationshipConstraint { .. }
+    ));
 }

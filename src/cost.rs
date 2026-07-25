@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Direction, Expr, RelationshipRange};
+use crate::ast::{Direction, Expr, RelationshipRange, StartLookup, StartPoint};
 use crate::plan::Plan;
 
 /// Pluggable cost model. All methods have permissive defaults so
@@ -50,6 +50,23 @@ pub trait CostModel {
     /// Estimated CSV records produced for each input row.
     fn load_csv_rows(&self, _url: &Expr) -> f64 {
         1_000.0
+    }
+
+    /// Estimated collection elements produced for each input row by UNWIND.
+    fn unwind_rows(&self, expression: &Expr) -> f64 {
+        match expression {
+            Expr::List(items) => items.len() as f64,
+            _ => 10.0,
+        }
+    }
+
+    /// Estimated rows returned by one legacy START lookup point.
+    fn start_point_cardinality(&self, point: &StartPoint) -> f64 {
+        match &point.lookup {
+            StartLookup::All => 10_000.0,
+            StartLookup::Ids(ids) => ids.len() as f64,
+            StartLookup::Index { .. } => 100.0,
+        }
     }
 }
 
@@ -150,6 +167,15 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
             cardinality: 1.0,
             cost: 0.0,
         },
+        Plan::CreateIndex { .. }
+        | Plan::DropIndex { .. }
+        | Plan::CreateNodeConstraint { .. }
+        | Plan::CreateRelationshipConstraint { .. }
+        | Plan::DropNodeConstraint { .. }
+        | Plan::DropRelationshipConstraint { .. } => Estimate {
+            cardinality: 0.0,
+            cost: 1.0,
+        },
         Plan::Scan { label, .. } => {
             let card = model.scan_cardinality(label.as_deref());
             Estimate {
@@ -225,6 +251,57 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
             Estimate {
                 cardinality: inp.cardinality,
                 cost: inp.cost + inp.cardinality * items.len().max(1) as f64,
+            }
+        }
+        Plan::Delete {
+            input, expressions, ..
+        } => {
+            let inp = estimate(input, model);
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + inp.cardinality * expressions.len().max(1) as f64,
+            }
+        }
+        Plan::Unwind {
+            input, expression, ..
+        } => {
+            let inp = estimate(input, model);
+            let cardinality = inp.cardinality * model.unwind_rows(expression).max(0.0);
+            Estimate {
+                cardinality,
+                cost: inp.cost + cardinality,
+            }
+        }
+        Plan::Foreach {
+            input,
+            expression,
+            updates,
+            ..
+        } => {
+            let inp = estimate(input, model);
+            let body = estimate(updates, model);
+            let iterations = model.unwind_rows(expression).max(0.0);
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + inp.cardinality * iterations * body.cost.max(1.0),
+            }
+        }
+        Plan::Start {
+            input,
+            points,
+            predicate,
+        } => {
+            let inp = estimate(input, model);
+            let lookup_rows = points.iter().fold(1.0, |rows, point| {
+                rows * model.start_point_cardinality(point).max(0.0)
+            });
+            let unfiltered = inp.cardinality * lookup_rows;
+            let selectivity = predicate
+                .as_ref()
+                .map_or(1.0, |expr| model.filter_selectivity(expr).clamp(0.0, 1.0));
+            Estimate {
+                cardinality: unfiltered * selectivity,
+                cost: inp.cost + unfiltered,
             }
         }
         Plan::Project { input, .. } => {

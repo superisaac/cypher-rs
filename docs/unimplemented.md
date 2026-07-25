@@ -19,17 +19,8 @@ more precise metadata.
 
 ## Parsed but Not Planned
 
-The parser and AST support the following operations, but the logical planner
-returns `PlanError::UnsupportedClause` for them:
-
-- `DELETE` and `DETACH DELETE`
-- `UNWIND`
-- `FOREACH`
-- `START`
-- `CREATE INDEX`
-- `DROP INDEX`
-- `CREATE CONSTRAINT`
-- `DROP CONSTRAINT`
+No known parsed operations remain without logical-plan representation in the
+tracked reference scope.
 
 ## Suggested Implementation Order
 
@@ -136,8 +127,8 @@ returns `PlanError::UnsupportedClause` for them:
     complete node and relationship property maps, invalid zero-prefixed and
     incomplete parameter rejection, semantic/planning preservation, and tests).
 26. [x] `FOREACH` (completed 2026-07-25; parser, recursive AST, multi-clause
-    and nested bodies, local iterator scope, semantic traversal, explicit
-    read-only planner rejection, malformed syntax rejection, and tests).
+    and nested bodies, local iterator scope, semantic traversal, logical-plan
+    representation, malformed syntax rejection, and tests).
 27. [x] `LOAD CSV` (completed 2026-07-25; optional `WITH HEADERS`, expression
     URLs, escaped row bindings, optional decoded `FIELDTERMINATOR`, semantic
     scope, logical plan, filter-pushdown boundary, projection analysis, cost
@@ -148,21 +139,21 @@ returns `PlanError::UnsupportedClause` for them:
     display, MCP option counts, malformed placement rejection, and tests).
 29. [x] `CREATE INDEX` (completed 2026-07-25; single and composite property
     indexes, escaped names, schema-command AST and statement isolation,
-    comments and case-insensitive keywords, semantic acceptance, explicit
-    read-only planner rejection, malformed syntax rejection, and tests).
+    comments and case-insensitive keywords, semantic acceptance, logical-plan
+    representation, malformed syntax rejection, and tests).
 30. [x] `DROP INDEX` (completed 2026-07-25; single and composite property
     indexes, shared index-command parser, escaped names, comments and
     case-insensitive keywords, schema-statement isolation, semantic acceptance,
-    explicit read-only planner rejection, malformed syntax rejection, and tests).
+    logical-plan representation, malformed syntax rejection, and tests).
 31. [x] `CREATE CONSTRAINT` (completed 2026-07-25; unique node constraints,
     node property-existence constraints, relationship property-existence
     constraints in all directions, escaped names, local expression scope,
-    schema-statement isolation, explicit read-only planner rejection, malformed
+    schema-statement isolation, logical-plan representation, malformed
     syntax rejection, and tests).
 32. [x] `DROP CONSTRAINT` (completed 2026-07-25; unique node constraints,
     node and relationship property-existence constraints in all directions,
     shared create/drop constraint parser, escaped names, local expression
-    scope, schema-statement isolation, explicit read-only planner rejection,
+    scope, schema-statement isolation, logical-plan representation,
     malformed syntax rejection, and tests).
 33. [x] `EXPLAIN` (completed 2026-07-25; structured statement-option AST,
     query and schema-command prefixes, ordering with query hints,
@@ -182,12 +173,12 @@ returns `PlanError::UnsupportedClause` for them:
 36. [x] `START` (completed 2026-07-25; node and relationship ID lookups,
     all-entity scans, index property lookups and query forms, multiple start
     points, attached predicates, escaped names and parameters, semantic
-    bindings, first-clause placement validation, explicit read-only planner
-    rejection, malformed syntax rejection, and tests).
+    bindings, first-clause placement validation, logical-plan representation,
+    malformed syntax rejection, and tests).
 37. [x] `CREATE UNIQUE` (completed 2026-07-25; reference-compatible unique
     flag on the CREATE AST, regular and multiple patterns, properties and
-    escaped names, FOREACH bodies, semantic traversal, explicit read-only
-    planner rejection, malformed syntax rejection, and tests).
+    escaped names, FOREACH bodies, semantic traversal, logical-plan
+    representation, malformed syntax rejection, and tests).
 38. [x] Core expression type inference and checking (completed 2026-07-25;
     public `CypherType` and `infer_expression_type` API, all expression
     variants, numeric promotion and collection/CASE/function result types,
@@ -237,6 +228,47 @@ returns `PlanError::UnsupportedClause` for them:
     multi-label removal preservation, target dependency analysis,
     output-column transparency, optimizer traversal, cost model, display, and
     tests).
+49. [x] Logical planning for `DELETE` and `DETACH DELETE` (completed
+    2026-07-25; detach-mode preservation, expression dependency analysis,
+    output-column transparency, optimizer traversal, cost model, display, and
+    tests).
+50. [x] Logical planning for `UNWIND` (completed 2026-07-25; collection
+    expression and alias preservation, binding and output-column propagation,
+    input dependency analysis, configurable cardinality estimation, optimizer
+    traversal, display, and tests).
+51. [x] Logical planning for `FOREACH` (completed 2026-07-25; collection and
+    iterator preservation, recursively planned update bodies, nested FOREACH,
+    iterator-local dependency analysis, output-column isolation, optimizer
+    traversal, cost model, display, and tests).
+52. [x] Logical planning for `START` (completed 2026-07-25; node and
+    relationship ID, all-entity and index lookup preservation, attached
+    predicate handling, binding propagation, external dependency analysis,
+    configurable cardinality estimation, optimizer traversal, display, and
+    tests).
+53. [x] Logical planning for `CREATE INDEX` (completed 2026-07-25; label and
+    ordered composite-property preservation, standalone DDL plan node,
+    query-option wrapping, optimizer stability, empty column dependencies,
+    cost model, display, and tests).
+54. [x] Logical planning for `DROP INDEX` (completed 2026-07-25; label and
+    ordered composite-property preservation, standalone DDL plan node,
+    query-option wrapping, optimizer stability, empty column dependencies,
+    cost model, display, and tests).
+55. [x] Logical planning for `CREATE CONSTRAINT` (completed 2026-07-25; node
+    uniqueness, node property-existence and relationship property-existence
+    plan nodes, target metadata and expression preservation, query-option
+    wrapping, optimizer stability, empty column dependencies, cost model,
+    display, and tests).
+56. [x] Logical planning for `DROP CONSTRAINT` (completed 2026-07-25; node
+    uniqueness, node property-existence and relationship property-existence
+    plan nodes, target metadata and expression preservation, query-option
+    wrapping, optimizer stability, empty column dependencies, cost model,
+    display, and tests).
+57. [x] Final parsed-operation planning audit (completed 2026-07-25; every
+    clause and schema command represented by the parser has a logical-plan
+    lowering path; no active `UnsupportedClause` path remains, and the public
+    error variant is retained for API compatibility; table-driven regression
+    coverage verifies clause families, schema-command variants, and query
+    options from parsing through planning).
 
 This order prioritizes syntax commonly found in real queries and the
 openCypher Technology Compatibility Kit over legacy extensions.

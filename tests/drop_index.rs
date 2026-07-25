@@ -89,10 +89,11 @@ fn semantic_analysis_accepts_drop_index_without_bindings() {
 }
 
 #[test]
-fn planner_reports_drop_index_as_unsupported() {
+fn planner_supports_drop_index() {
     let query = parse("DROP INDEX ON :Person(name)").unwrap();
-    assert_eq!(
-        plan(&query),
-        Err(PlanError::UnsupportedClause("DROP INDEX"))
-    );
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::DropIndex { label, properties }
+            if label == "Person" && properties == ["name"]
+    ));
 }

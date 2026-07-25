@@ -136,15 +136,16 @@ fn semantic_analysis_uses_the_constraint_target_scope() {
 }
 
 #[test]
-fn planner_reports_create_constraint_as_unsupported() {
-    for source in [
-        "CREATE CONSTRAINT ON (f:Foo) ASSERT f.bar IS UNIQUE",
-        "CREATE CONSTRAINT ON ()-[r:KNOWS]-() ASSERT exists(r.since)",
-    ] {
-        let query = parse(source).unwrap();
-        assert_eq!(
-            plan(&query),
-            Err(PlanError::UnsupportedClause("CREATE CONSTRAINT"))
-        );
-    }
+fn planner_supports_create_constraint() {
+    let query = parse("CREATE CONSTRAINT ON (f:Foo) ASSERT f.bar IS UNIQUE").unwrap();
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::CreateNodeConstraint { unique: true, .. }
+    ));
+
+    let query = parse("CREATE CONSTRAINT ON ()-[r:KNOWS]-() ASSERT exists(r.since)").unwrap();
+    assert!(matches!(
+        plan(&query).unwrap(),
+        Plan::CreateRelationshipConstraint { .. }
+    ));
 }

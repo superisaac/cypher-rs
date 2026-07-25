@@ -121,6 +121,67 @@ pub enum Plan {
         input: Box<Plan>,
         items: Vec<RemoveItem>,
     },
+    /// Delete entities referenced by `expressions` for every input row.
+    Delete {
+        input: Box<Plan>,
+        detach: bool,
+        expressions: Vec<Expr>,
+    },
+    /// Expand a collection expression into one row per element and bind it.
+    Unwind {
+        input: Box<Plan>,
+        expression: Expr,
+        alias: String,
+    },
+    /// Execute an update plan once for each element of a collection.
+    Foreach {
+        input: Box<Plan>,
+        variable: String,
+        expression: Expr,
+        updates: Box<Plan>,
+    },
+    /// Resolve legacy START lookup points and bind their entities.
+    Start {
+        input: Box<Plan>,
+        points: Vec<StartPoint>,
+        predicate: Option<Expr>,
+    },
+    /// Create a legacy schema index over one or more label properties.
+    CreateIndex {
+        label: String,
+        properties: Vec<String>,
+    },
+    /// Drop a legacy schema index over one or more label properties.
+    DropIndex {
+        label: String,
+        properties: Vec<String>,
+    },
+    /// Create a uniqueness or property-existence constraint on nodes.
+    CreateNodeConstraint {
+        variable: String,
+        label: String,
+        expression: Expr,
+        unique: bool,
+    },
+    /// Create a property-existence constraint on relationships.
+    CreateRelationshipConstraint {
+        variable: String,
+        relationship_type: String,
+        expression: Expr,
+    },
+    /// Drop a uniqueness or property-existence constraint on nodes.
+    DropNodeConstraint {
+        variable: String,
+        label: String,
+        expression: Expr,
+        unique: bool,
+    },
+    /// Drop a property-existence constraint on relationships.
+    DropRelationshipConstraint {
+        variable: String,
+        relationship_type: String,
+        expression: Expr,
+    },
     /// Execute the query in transaction batches of an optional explicit size.
     PeriodicCommit {
         input: Box<Plan>,
@@ -166,7 +227,7 @@ pub enum PlanError {
     UnionBranchWithoutReturn,
     /// UNION branches must project the same number of columns.
     UnionColumnCountMismatch { left: usize, right: usize },
-    /// The parser supports the clause, but the read-only logical planner does not.
+    /// The parser supports the clause, but the logical planner does not.
     UnsupportedClause(&'static str),
 }
 
@@ -282,8 +343,65 @@ fn plan_branch(clauses: &[Clause]) -> Result<(Plan, Option<usize>), PlanError> {
 
     for clause in clauses {
         match clause {
-            Clause::SchemaCommand(command) => {
-                return Err(PlanError::UnsupportedClause(command.name()));
+            Clause::SchemaCommand(SchemaCommand::CreateIndex { label, properties }) => {
+                plan = Plan::CreateIndex {
+                    label: label.clone(),
+                    properties: properties.clone(),
+                };
+            }
+            Clause::SchemaCommand(SchemaCommand::DropIndex { label, properties }) => {
+                plan = Plan::DropIndex {
+                    label: label.clone(),
+                    properties: properties.clone(),
+                };
+            }
+            Clause::SchemaCommand(SchemaCommand::CreateNodeConstraint {
+                variable,
+                label,
+                expression,
+                unique,
+            }) => {
+                plan = Plan::CreateNodeConstraint {
+                    variable: variable.clone(),
+                    label: label.clone(),
+                    expression: expression.clone(),
+                    unique: *unique,
+                };
+            }
+            Clause::SchemaCommand(SchemaCommand::CreateRelationshipConstraint {
+                variable,
+                relationship_type,
+                expression,
+            }) => {
+                plan = Plan::CreateRelationshipConstraint {
+                    variable: variable.clone(),
+                    relationship_type: relationship_type.clone(),
+                    expression: expression.clone(),
+                };
+            }
+            Clause::SchemaCommand(SchemaCommand::DropNodeConstraint {
+                variable,
+                label,
+                expression,
+                unique,
+            }) => {
+                plan = Plan::DropNodeConstraint {
+                    variable: variable.clone(),
+                    label: label.clone(),
+                    expression: expression.clone(),
+                    unique: *unique,
+                };
+            }
+            Clause::SchemaCommand(SchemaCommand::DropRelationshipConstraint {
+                variable,
+                relationship_type,
+                expression,
+            }) => {
+                plan = Plan::DropRelationshipConstraint {
+                    variable: variable.clone(),
+                    relationship_type: relationship_type.clone(),
+                    expression: expression.clone(),
+                };
             }
             Clause::Match(m) => {
                 collect_match_bindings(m, &mut visible_bindings);
@@ -425,10 +543,38 @@ fn plan_branch(clauses: &[Clause]) -> Result<(Plan, Option<usize>), PlanError> {
                     items: remove.items.clone(),
                 };
             }
-            Clause::Delete(_) => return Err(PlanError::UnsupportedClause("DELETE")),
-            Clause::Unwind(_) => return Err(PlanError::UnsupportedClause("UNWIND")),
-            Clause::Foreach(_) => return Err(PlanError::UnsupportedClause("FOREACH")),
-            Clause::Start(_) => return Err(PlanError::UnsupportedClause("START")),
+            Clause::Delete(delete) => {
+                plan = Plan::Delete {
+                    input: Box::new(plan),
+                    detach: delete.detach,
+                    expressions: delete.expressions.clone(),
+                };
+            }
+            Clause::Unwind(unwind) => {
+                visible_bindings.insert(unwind.alias.clone());
+                plan = Plan::Unwind {
+                    input: Box::new(plan),
+                    expression: unwind.expr.clone(),
+                    alias: unwind.alias.clone(),
+                };
+            }
+            Clause::Foreach(foreach) => {
+                let (updates, _) = plan_branch(&foreach.clauses)?;
+                plan = Plan::Foreach {
+                    input: Box::new(plan),
+                    variable: foreach.variable.clone(),
+                    expression: foreach.expression.clone(),
+                    updates: Box::new(updates),
+                };
+            }
+            Clause::Start(start) => {
+                visible_bindings.extend(start.points.iter().map(|point| point.variable.clone()));
+                plan = Plan::Start {
+                    input: Box::new(plan),
+                    points: start.points.clone(),
+                    predicate: start.predicate.clone(),
+                };
+            }
             Clause::Union(_) => unreachable!("UNION markers are split before branch planning"),
         }
     }
@@ -853,6 +999,108 @@ fn write_plan(plan: &Plan, f: &mut fmt::Formatter<'_>, depth: usize, root: bool)
         Plan::Remove { input, items } => {
             writeln!(f, "Remove {{ items: {} }}", items.len())?;
             write_plan(input, f, depth + 1, false)?;
+        }
+        Plan::Delete {
+            input,
+            detach,
+            expressions,
+        } => {
+            writeln!(
+                f,
+                "Delete {{ detach: {detach}, expressions: {} }}",
+                expressions.len()
+            )?;
+            write_plan(input, f, depth + 1, false)?;
+        }
+        Plan::Unwind {
+            input,
+            expression,
+            alias,
+        } => {
+            writeln!(f, "Unwind {{ expression: {expression:?}, alias: {alias} }}")?;
+            write_plan(input, f, depth + 1, false)?;
+        }
+        Plan::Foreach {
+            input,
+            variable,
+            expression,
+            updates,
+        } => {
+            writeln!(
+                f,
+                "Foreach {{ variable: {variable}, expression: {expression:?} }}"
+            )?;
+            write_plan(input, f, depth + 1, false)?;
+            write_plan(updates, f, depth + 1, false)?;
+        }
+        Plan::Start {
+            input,
+            points,
+            predicate,
+        } => {
+            writeln!(
+                f,
+                "Start {{ points: {}, predicate: {} }}",
+                points.len(),
+                predicate.is_some()
+            )?;
+            write_plan(input, f, depth + 1, false)?;
+        }
+        Plan::CreateIndex { label, properties } => {
+            writeln!(
+                f,
+                "CreateIndex {{ label: {label}, properties: [{}] }}",
+                properties.join(", ")
+            )?;
+        }
+        Plan::DropIndex { label, properties } => {
+            writeln!(
+                f,
+                "DropIndex {{ label: {label}, properties: [{}] }}",
+                properties.join(", ")
+            )?;
+        }
+        Plan::CreateNodeConstraint {
+            variable,
+            label,
+            expression,
+            unique,
+        } => {
+            writeln!(
+                f,
+                "CreateNodeConstraint {{ variable: {variable}, label: {label}, expression: {expression:?}, unique: {unique} }}"
+            )?;
+        }
+        Plan::CreateRelationshipConstraint {
+            variable,
+            relationship_type,
+            expression,
+        } => {
+            writeln!(
+                f,
+                "CreateRelationshipConstraint {{ variable: {variable}, relationship_type: {relationship_type}, expression: {expression:?} }}"
+            )?;
+        }
+        Plan::DropNodeConstraint {
+            variable,
+            label,
+            expression,
+            unique,
+        } => {
+            writeln!(
+                f,
+                "DropNodeConstraint {{ variable: {variable}, label: {label}, expression: {expression:?}, unique: {unique} }}"
+            )?;
+        }
+        Plan::DropRelationshipConstraint {
+            variable,
+            relationship_type,
+            expression,
+        } => {
+            writeln!(
+                f,
+                "DropRelationshipConstraint {{ variable: {variable}, relationship_type: {relationship_type}, expression: {expression:?} }}"
+            )?;
         }
         Plan::PeriodicCommit { input, limit } => {
             writeln!(

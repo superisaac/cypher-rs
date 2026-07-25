@@ -1,4 +1,4 @@
-use cypher_rs::{analyze, parse, plan, Clause, Expr, Literal, PlanError, StartEntity, StartLookup};
+use cypher_rs::{analyze, parse, plan, Clause, Expr, Literal, Plan, StartEntity, StartLookup};
 
 fn start_clause(source: &str) -> cypher_rs::StartClause {
     let query = parse(source).unwrap();
@@ -70,9 +70,12 @@ fn supports_escaped_names_comments_and_case_insensitive_keywords() {
 }
 
 #[test]
-fn planner_reports_start_as_unsupported() {
+fn planner_supports_start() {
     let query = parse("START n=node(*) RETURN n").unwrap();
-    assert_eq!(plan(&query), Err(PlanError::UnsupportedClause("START")));
+    let Plan::Project { input, .. } = plan(&query).unwrap() else {
+        panic!("expected Project");
+    };
+    assert!(matches!(input.as_ref(), Plan::Start { points, .. } if points.len() == 1));
 }
 
 #[test]

@@ -93,7 +93,17 @@ fn foreach_source_expression_uses_outer_scope() {
 }
 
 #[test]
-fn planner_reports_foreach_as_unsupported() {
+fn planner_supports_foreach() {
     let query = parse("MATCH (n) FOREACH (x IN [1] | SET n.value = x) RETURN n").unwrap();
-    assert_eq!(plan(&query), Err(PlanError::UnsupportedClause("FOREACH")));
+    let Plan::Project { input, .. } = plan(&query).unwrap() else {
+        panic!("expected Project");
+    };
+    assert!(matches!(
+        input.as_ref(),
+        Plan::Foreach {
+            variable,
+            updates,
+            ..
+        } if variable == "x" && matches!(updates.as_ref(), Plan::Set { .. })
+    ));
 }
