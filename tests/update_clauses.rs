@@ -159,15 +159,47 @@ fn rejects_invalid_update_syntax() {
 }
 
 #[test]
-fn planner_reports_update_clauses_as_unsupported() {
+fn planner_supports_create() {
     let q = parse("CREATE (n)").unwrap();
-    assert_eq!(plan(&q), Err(PlanError::UnsupportedClause("CREATE")));
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Create {
+            unique: false,
+            patterns,
+            ..
+        } if patterns.len() == 1
+    ));
 }
 
 #[test]
-fn planner_reports_remove_as_unsupported() {
+fn planner_supports_merge() {
+    let q = parse("MERGE (n) ON CREATE SET n.created = true").unwrap();
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Merge {
+            pattern,
+            actions,
+            ..
+        } if pattern.anchor.var.as_deref() == Some("n") && actions.len() == 1
+    ));
+}
+
+#[test]
+fn planner_supports_set() {
+    let q = parse("MATCH (n) SET n.active = true").unwrap();
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Set { items, .. } if items.len() == 1
+    ));
+}
+
+#[test]
+fn planner_supports_remove() {
     let q = parse("MATCH (n) REMOVE n.name").unwrap();
-    assert_eq!(plan(&q), Err(PlanError::UnsupportedClause("REMOVE")));
+    assert!(matches!(
+        plan(&q).unwrap(),
+        Plan::Remove { items, .. } if items.len() == 1
+    ));
 }
 
 #[test]

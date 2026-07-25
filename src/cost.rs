@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Direction, Expr};
+use crate::ast::{Direction, Expr, RelationshipRange};
 use crate::plan::Plan;
 
 /// Pluggable cost model. All methods have permissive defaults so
@@ -45,6 +45,11 @@ pub trait CostModel {
     /// pass it. Must be in `[0.0, 1.0]`.
     fn filter_selectivity(&self, _pred: &Expr) -> f64 {
         0.1
+    }
+
+    /// Estimated CSV records produced for each input row.
+    fn load_csv_rows(&self, _url: &Expr) -> f64 {
+        1_000.0
     }
 }
 
@@ -155,11 +160,12 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
         Plan::Expand {
             input,
             rel_types,
+            range,
             direction,
             ..
         } => {
             let inp = estimate(input, model);
-            let f = model.expand_fanout(rel_types, *direction);
+            let f = relationship_fanout(model.expand_fanout(rel_types, *direction), range.as_ref());
             let card = inp.cardinality * f;
             Estimate {
                 cardinality: card,
@@ -172,6 +178,53 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
             Estimate {
                 cardinality: inp.cardinality * sel,
                 cost: inp.cost + inp.cardinality,
+            }
+        }
+        Plan::PropertyMapFilter { input, map, .. } => {
+            let inp = estimate(input, model);
+            let sel = model.filter_selectivity(map).clamp(0.0, 1.0);
+            Estimate {
+                cardinality: inp.cardinality * sel,
+                cost: inp.cost + inp.cardinality,
+            }
+        }
+        Plan::PlannerHint { input, .. } => estimate(input, model),
+        Plan::PeriodicCommit { input, .. } => estimate(input, model),
+        Plan::Explain { input } => estimate(input, model),
+        Plan::Profile { input } => estimate(input, model),
+        Plan::Create {
+            input,
+            unique,
+            patterns,
+        } => {
+            let inp = estimate(input, model);
+            let work =
+                inp.cardinality * patterns.len().max(1) as f64 * if *unique { 2.0 } else { 1.0 };
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + work,
+            }
+        }
+        Plan::Merge { input, actions, .. } => {
+            let inp = estimate(input, model);
+            let work = inp.cardinality * (1 + actions.len()) as f64;
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + work,
+            }
+        }
+        Plan::Set { input, items } => {
+            let inp = estimate(input, model);
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + inp.cardinality * items.len().max(1) as f64,
+            }
+        }
+        Plan::Remove { input, items } => {
+            let inp = estimate(input, model);
+            Estimate {
+                cardinality: inp.cardinality,
+                cost: inp.cost + inp.cardinality * items.len().max(1) as f64,
             }
         }
         Plan::Project { input, .. } => {
@@ -225,6 +278,35 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
                 cost: i.cost + o.cost + i.cardinality,
             }
         }
+        Plan::ShortestPath { input, .. } => {
+            let input = estimate(input, model);
+            Estimate {
+                cardinality: input.cardinality,
+                cost: input.cost + input.cardinality,
+            }
+        }
+        Plan::NamedPath { input, .. } => {
+            let input = estimate(input, model);
+            Estimate {
+                cardinality: input.cardinality,
+                cost: input.cost + input.cardinality,
+            }
+        }
+        Plan::ProcedureCall { input, .. } => {
+            let input = estimate(input, model);
+            Estimate {
+                cardinality: input.cardinality,
+                cost: input.cost + input.cardinality,
+            }
+        }
+        Plan::LoadCsv { input, url, .. } => {
+            let input = estimate(input, model);
+            let cardinality = input.cardinality * model.load_csv_rows(url).max(0.0);
+            Estimate {
+                cardinality,
+                cost: input.cost + cardinality,
+            }
+        }
         Plan::Distinct { input } => {
             let i = estimate(input, model);
             // Conservatively assume at most half the rows survive dedup.
@@ -234,7 +316,35 @@ pub fn estimate<M: CostModel + ?Sized>(plan: &Plan, model: &M) -> Estimate {
                 cost: i.cost + i.cardinality,
             }
         }
+        Plan::Union { left, right, all } => {
+            let left = estimate(left, model);
+            let right = estimate(right, model);
+            let combined = left.cardinality + right.cardinality;
+            let cardinality = if *all {
+                combined
+            } else {
+                (combined / 2.0).max(1.0)
+            };
+            Estimate {
+                cardinality,
+                cost: left.cost + right.cost + combined,
+            }
+        }
     }
+}
+
+fn relationship_fanout(base: f64, range: Option<&RelationshipRange>) -> f64 {
+    let Some(range) = range else {
+        return base;
+    };
+    // Unbounded paths use three representative hop counts. Cap exponents so
+    // malformed or extreme user bounds cannot overflow the heuristic.
+    let start = range.start.unwrap_or(1).min(16);
+    let end = range.end.unwrap_or(start.saturating_add(2)).min(16);
+    if start > end {
+        return 0.0;
+    }
+    (start..=end).map(|hops| base.powi(hops as i32)).sum()
 }
 
 fn expr_as_f64(e: &Expr) -> Option<f64> {

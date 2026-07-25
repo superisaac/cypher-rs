@@ -59,14 +59,55 @@ fn walk_output(plan: &Plan, out: &mut HashSet<String>) {
                 out.insert(v.clone());
             }
         }
+        Plan::ProcedureCall { input, yields, .. } => {
+            walk_output(input, out);
+            out.extend(yields.iter().map(|item| item.binding().to_string()));
+        }
+        Plan::LoadCsv {
+            input, variable, ..
+        } => {
+            walk_output(input, out);
+            out.insert(variable.clone());
+        }
+        Plan::Create {
+            input, patterns, ..
+        } => {
+            walk_output(input, out);
+            for pattern in patterns {
+                insert_pattern_bindings(pattern, out);
+            }
+        }
+        Plan::Merge { input, pattern, .. } => {
+            walk_output(input, out);
+            insert_pattern_bindings(pattern, out);
+        }
+        Plan::Set { input, .. } => walk_output(input, out),
+        Plan::Remove { input, .. } => walk_output(input, out),
         Plan::Filter { input, .. }
+        | Plan::PropertyMapFilter { input, .. }
         | Plan::Sort { input, .. }
         | Plan::Skip { input, .. }
-        | Plan::Limit { input, .. } => walk_output(input, out),
-        Plan::Project { exprs, .. } => {
+        | Plan::Limit { input, .. }
+        | Plan::ShortestPath { input, .. }
+        | Plan::PlannerHint { input, .. }
+        | Plan::PeriodicCommit { input, .. }
+        | Plan::Explain { input }
+        | Plan::Profile { input } => walk_output(input, out),
+        Plan::NamedPath { input, variable } => {
+            walk_output(input, out);
+            out.insert(variable.clone());
+        }
+        Plan::Project {
+            input,
+            include_existing,
+            exprs,
+        } => {
             // Projects replace the output schema. Collect each item's
             // visible name: alias if present, else the bare Variable
             // name, else nothing (anonymous).
+            if *include_existing {
+                walk_output(input, out);
+            }
             for e in exprs {
                 if let Some(name) = visible_name(e) {
                     out.insert(name);
@@ -82,6 +123,7 @@ fn walk_output(plan: &Plan, out: &mut HashSet<String>) {
             walk_output(optional, out);
         }
         Plan::Distinct { input } => walk_output(input, out),
+        Plan::Union { left, .. } => walk_output(left, out),
     }
 }
 
@@ -107,6 +149,11 @@ pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> Ha
     match plan {
         Plan::Empty | Plan::Scan { .. } => HashSet::new(),
         Plan::Filter { pred, .. } => union(outer_demand, &used_vars_expr(pred)),
+        Plan::PropertyMapFilter { variable, map, .. } => {
+            let mut demand = union(outer_demand, &used_vars_expr(map));
+            demand.insert(variable.clone());
+            demand
+        }
         Plan::Sort { keys, .. } => {
             let mut acc = outer_demand.clone();
             for k in keys {
@@ -121,13 +168,33 @@ pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> Ha
             acc.extend(used_vars_expr(count));
             acc
         }
-        Plan::Project { exprs, .. } => {
+        Plan::Project {
+            input,
+            include_existing,
+            exprs,
+        } => {
             // The input must supply every variable referenced by any
             // project item whose visible name is in outer_demand,
             // plus every variable referenced by anonymous items
             // (which are still evaluated even if not consumed by a
             // demand set).
-            let mut acc = HashSet::new();
+            let explicit_names = exprs
+                .iter()
+                .filter_map(visible_name)
+                .collect::<HashSet<_>>();
+            let mut acc = if *include_existing {
+                let demand = if outer_demand.is_empty() {
+                    output_columns(input)
+                } else {
+                    outer_demand.clone()
+                };
+                demand
+                    .difference(&explicit_names)
+                    .cloned()
+                    .collect::<HashSet<_>>()
+            } else {
+                HashSet::new()
+            };
             for e in exprs {
                 let name = visible_name(e);
                 let referenced = match &name {
@@ -155,7 +222,70 @@ pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> Ha
             }
             acc
         }
-        Plan::Cartesian { .. } | Plan::Optional { .. } => {
+        Plan::ProcedureCall {
+            arguments, yields, ..
+        } => {
+            let yielded = yields
+                .iter()
+                .map(|item| item.binding())
+                .collect::<HashSet<_>>();
+            let mut acc = outer_demand
+                .iter()
+                .filter(|name| !yielded.contains(name.as_str()))
+                .cloned()
+                .collect::<HashSet<_>>();
+            for argument in arguments {
+                acc.extend(used_vars_expr(argument));
+            }
+            acc
+        }
+        Plan::LoadCsv { url, variable, .. } => {
+            let mut acc = outer_demand
+                .iter()
+                .filter(|name| *name != variable)
+                .cloned()
+                .collect::<HashSet<_>>();
+            acc.extend(used_vars_expr(url));
+            acc
+        }
+        Plan::Create { patterns, .. } => {
+            let mut acc = outer_demand.clone();
+            for pattern in patterns {
+                remove_pattern_bindings(pattern, &mut acc);
+                walk_pattern_expressions(pattern, &mut acc);
+            }
+            acc
+        }
+        Plan::Merge {
+            pattern, actions, ..
+        } => {
+            let mut acc = outer_demand.clone();
+            walk_pattern_expressions(pattern, &mut acc);
+            for action in actions {
+                for item in &action.items {
+                    walk_set_item_expressions(item, &mut acc);
+                }
+            }
+            // Pattern bindings are produced by MERGE and are available to its
+            // actions; they do not need to be supplied by the input.
+            remove_pattern_bindings(pattern, &mut acc);
+            acc
+        }
+        Plan::Set { items, .. } => {
+            let mut acc = outer_demand.clone();
+            for item in items {
+                walk_set_item_expressions(item, &mut acc);
+            }
+            acc
+        }
+        Plan::Remove { items, .. } => {
+            let mut acc = outer_demand.clone();
+            for item in items {
+                walk_remove_item_expressions(item, &mut acc);
+            }
+            acc
+        }
+        Plan::Cartesian { .. } | Plan::Optional { .. } | Plan::Union { .. } => {
             // Both branches see the same outer demand, restricted to
             // variables that branch's subtree actually exposes.
             // For input-of-self purposes, the immediate input is the
@@ -167,6 +297,16 @@ pub fn required_input_columns(plan: &Plan, outer_demand: &HashSet<String>) -> Ha
             // Distinct is transparent: it passes every column through unchanged.
             outer_demand.clone()
         }
+        Plan::ShortestPath { .. } => outer_demand.clone(),
+        Plan::PlannerHint { .. } => outer_demand.clone(),
+        Plan::PeriodicCommit { .. } => outer_demand.clone(),
+        Plan::Explain { .. } => outer_demand.clone(),
+        Plan::Profile { .. } => outer_demand.clone(),
+        Plan::NamedPath { variable, .. } => outer_demand
+            .iter()
+            .filter(|name| *name != variable)
+            .cloned()
+            .collect(),
     }
 }
 
@@ -188,6 +328,156 @@ fn walk_expr(expr: &Expr, out: &mut HashSet<String>) {
             out.insert(v.clone());
         }
         Expr::Property { base, .. } => walk_expr(base, out),
+        Expr::LabelPredicate { expression, .. } => walk_expr(expression, out),
+        Expr::Subscript { base, index } => {
+            walk_expr(base, out);
+            walk_expr(index, out);
+        }
+        Expr::Slice { base, start, end } => {
+            walk_expr(base, out);
+            if let Some(start) = start {
+                walk_expr(start, out);
+            }
+            if let Some(end) = end {
+                walk_expr(end, out);
+            }
+        }
+        Expr::MapProjection { base, items } => {
+            walk_expr(base, out);
+            for item in items {
+                match item {
+                    MapProjectionItem::Literal { value, .. } => walk_expr(value, out),
+                    MapProjectionItem::Variable(variable) => {
+                        out.insert(variable.clone());
+                    }
+                    MapProjectionItem::Property(_) | MapProjectionItem::AllProperties => {}
+                }
+            }
+        }
+        Expr::FunctionCall { arguments, .. } => {
+            if let FunctionArguments::Expressions(arguments) = arguments {
+                for argument in arguments {
+                    walk_expr(argument, out);
+                }
+            }
+        }
+        Expr::ListComprehension {
+            variable,
+            source,
+            predicate,
+            projection,
+        } => {
+            walk_expr(source, out);
+            let mut local = HashSet::new();
+            if let Some(predicate) = predicate {
+                walk_expr(predicate, &mut local);
+            }
+            if let Some(projection) = projection {
+                walk_expr(projection, &mut local);
+            }
+            local.remove(variable);
+            out.extend(local);
+        }
+        Expr::CollectionPredicate {
+            variable,
+            source,
+            predicate,
+            ..
+        } => {
+            walk_expr(source, out);
+            let mut local = HashSet::new();
+            if let Some(predicate) = predicate {
+                walk_expr(predicate, &mut local);
+            }
+            local.remove(variable);
+            out.extend(local);
+        }
+        Expr::PatternComprehension {
+            path_variable,
+            pattern,
+            predicate,
+            projection,
+        } => {
+            let mut local = HashSet::new();
+            walk_pattern_expressions(pattern, &mut local);
+            if let Some(predicate) = predicate {
+                walk_expr(predicate, &mut local);
+            }
+            walk_expr(projection, &mut local);
+            if let Some(path_variable) = path_variable {
+                local.remove(path_variable);
+            }
+            remove_pattern_bindings(pattern, &mut local);
+            out.extend(local);
+        }
+        Expr::PatternExpression { pattern } => {
+            walk_pattern_expressions(pattern, out);
+            insert_pattern_bindings(pattern, out);
+        }
+        Expr::Filter {
+            variable,
+            source,
+            predicate,
+        } => {
+            walk_expr(source, out);
+            let mut local = HashSet::new();
+            if let Some(predicate) = predicate {
+                walk_expr(predicate, &mut local);
+            }
+            local.remove(variable);
+            out.extend(local);
+        }
+        Expr::Extract {
+            variable,
+            source,
+            projection,
+        } => {
+            walk_expr(source, out);
+            let mut local = HashSet::new();
+            if let Some(projection) = projection {
+                walk_expr(projection, &mut local);
+            }
+            local.remove(variable);
+            out.extend(local);
+        }
+        Expr::Reduce {
+            accumulator,
+            initial,
+            variable,
+            source,
+            expression,
+        } => {
+            walk_expr(initial, out);
+            walk_expr(source, out);
+            let mut local = HashSet::new();
+            if let Some(expression) = expression {
+                walk_expr(expression, &mut local);
+            }
+            local.remove(accumulator);
+            local.remove(variable);
+            out.extend(local);
+        }
+        Expr::Case {
+            operand,
+            alternatives,
+            else_expr,
+        } => {
+            if let Some(operand) = operand {
+                walk_expr(operand, out);
+            }
+            for alternative in alternatives {
+                walk_expr(&alternative.when, out);
+                walk_expr(&alternative.then, out);
+            }
+            if let Some(else_expr) = else_expr {
+                walk_expr(else_expr, out);
+            }
+        }
+        Expr::ComparisonChain { arguments, .. } => {
+            for argument in arguments {
+                walk_expr(argument, out);
+            }
+        }
         Expr::Binary { lhs, rhs, .. } => {
             walk_expr(lhs, out);
             walk_expr(rhs, out);
@@ -204,6 +494,89 @@ fn walk_expr(expr: &Expr, out: &mut HashSet<String>) {
             }
         }
         Expr::Literal(_) | Expr::Param(_) => {}
+    }
+}
+
+fn walk_pattern_expressions(pattern: &Pattern, out: &mut HashSet<String>) {
+    for (_, value) in &pattern.anchor.properties {
+        walk_expr(value, out);
+    }
+    if let Some(property_map) = &pattern.anchor.property_map {
+        walk_expr(property_map, out);
+    }
+    for chain in &pattern.chain {
+        for (_, value) in &chain.rel.properties {
+            walk_expr(value, out);
+        }
+        if let Some(property_map) = &chain.rel.property_map {
+            walk_expr(property_map, out);
+        }
+        for (_, value) in &chain.node.properties {
+            walk_expr(value, out);
+        }
+        if let Some(property_map) = &chain.node.property_map {
+            walk_expr(property_map, out);
+        }
+    }
+}
+
+fn walk_set_item_expressions(item: &SetItem, out: &mut HashSet<String>) {
+    match item {
+        SetItem::Property { property, value } => {
+            walk_expr(property, out);
+            walk_expr(value, out);
+        }
+        SetItem::AllProperties { variable, value }
+        | SetItem::MergeProperties { variable, value } => {
+            out.insert(variable.clone());
+            walk_expr(value, out);
+        }
+        SetItem::Labels { variable, .. } => {
+            out.insert(variable.clone());
+        }
+    }
+}
+
+fn walk_remove_item_expressions(item: &RemoveItem, out: &mut HashSet<String>) {
+    match item {
+        RemoveItem::Property(property) => walk_expr(property, out),
+        RemoveItem::Labels { variable, .. } => {
+            out.insert(variable.clone());
+        }
+    }
+}
+
+fn remove_pattern_bindings(pattern: &Pattern, out: &mut HashSet<String>) {
+    if let Some(variable) = &pattern.path_variable {
+        out.remove(variable);
+    }
+    if let Some(variable) = &pattern.anchor.var {
+        out.remove(variable);
+    }
+    for chain in &pattern.chain {
+        if let Some(variable) = &chain.rel.var {
+            out.remove(variable);
+        }
+        if let Some(variable) = &chain.node.var {
+            out.remove(variable);
+        }
+    }
+}
+
+fn insert_pattern_bindings(pattern: &Pattern, out: &mut HashSet<String>) {
+    if let Some(variable) = &pattern.path_variable {
+        out.insert(variable.clone());
+    }
+    if let Some(variable) = &pattern.anchor.var {
+        out.insert(variable.clone());
+    }
+    for chain in &pattern.chain {
+        if let Some(variable) = &chain.rel.var {
+            out.insert(variable.clone());
+        }
+        if let Some(variable) = &chain.node.var {
+            out.insert(variable.clone());
+        }
     }
 }
 

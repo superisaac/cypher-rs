@@ -1,8 +1,14 @@
 //! `cypher-rs` - openCypher front-end in Rust.
 //!
 //! Pre-v0. Parses a subset of openCypher including read clauses (`MATCH`,
-//! `WHERE`, `RETURN`, `WITH`, ordering and pagination) and update clauses
-//! (`CREATE`, `MERGE`, `SET`, `REMOVE`, `DELETE`, `UNWIND`), plus common expressions.
+//! `LOAD CSV`, `WHERE`, `RETURN`, `WITH`, ordering and pagination) and update
+//! clauses (`CREATE`, `CREATE UNIQUE`, `MERGE`, `SET`, `REMOVE`, `DELETE`,
+//! `UNWIND`, `FOREACH`), legacy `START` lookups,
+//! the `EXPLAIN`, `PROFILE`, `CYPHER`, and `USING PERIODIC COMMIT` query
+//! options, index and constraint schema commands, plus common expressions.
+//! Semantic analysis includes conservative expression type inference and
+//! statically-known operand and clause-context validation, with optional
+//! schema metadata for variables, properties, parameters, and functions.
 //!
 //! ```
 //! use cypher_rs::parse;
@@ -32,5 +38,6 @@ pub use parser::parse;
 pub use plan::{plan, Plan, PlanError, ProjectExpr, SortKey};
 pub use prune::{output_columns, required_input_columns};
 pub use sema::{
-    analyze, analyze_with, AnalysisReport, PermissiveSchema, Schema, SemIssue, SemSeverity,
+    analyze, analyze_with, infer_expression_type, infer_expression_type_with, AnalysisReport,
+    CypherType, FunctionSignature, PermissiveSchema, Schema, SemIssue, SemSeverity,
 };

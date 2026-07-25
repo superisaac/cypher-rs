@@ -15,6 +15,9 @@ pub enum ParseError {
 
     #[error("invalid float literal: {0}")]
     InvalidFloat(String),
+
+    #[error("invalid string literal: {0}")]
+    InvalidString(String),
 }
 
 impl From<pest::error::Error<Rule>> for ParseError {

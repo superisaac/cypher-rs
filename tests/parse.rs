@@ -54,15 +54,15 @@ fn parses_where_property_param() {
 
 #[test]
 fn parses_limit_and_skip() {
-    let q = parse("MATCH (u) RETURN u LIMIT 10 SKIP 5").unwrap();
+    let q = parse("MATCH (u) RETURN u SKIP 5 LIMIT 10").unwrap();
     assert_eq!(q.clauses.len(), 4);
     match &q.clauses[2] {
-        Clause::Limit(Expr::Literal(Literal::Int(10))) => {}
-        other => panic!("expected LIMIT 10, got {other:?}"),
-    }
-    match &q.clauses[3] {
         Clause::Skip(Expr::Literal(Literal::Int(5))) => {}
         other => panic!("expected SKIP 5, got {other:?}"),
+    }
+    match &q.clauses[3] {
+        Clause::Limit(Expr::Literal(Literal::Int(10))) => {}
+        other => panic!("expected LIMIT 10, got {other:?}"),
     }
 }
 

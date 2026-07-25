@@ -181,7 +181,9 @@ fn tool_parse(args: &Value) -> Result<Value, String> {
     match parse(query) {
         Ok(q) => Ok(json!({
             "ok": true,
-            "clause_count": q.clauses.len(),
+            "statement_count": q.statement_count(),
+            "option_count": q.option_count(),
+            "clause_count": q.clause_count(),
             "ast": format!("{q:#?}"),
         })),
         Err(e) => Ok(json!({
@@ -306,7 +308,12 @@ fn tool_explain(args: &Value) -> Result<Value, String> {
     bindings.sort();
 
     Ok(json!({
-        "parse": { "ok": true, "clause_count": q.clauses.len() },
+        "parse": {
+            "ok": true,
+            "statement_count": q.statement_count(),
+            "option_count": q.option_count(),
+            "clause_count": q.clause_count()
+        },
         "analyze": {
             "bindings": bindings,
             "issues": report.issues.iter().map(issue_to_json).collect::<Vec<_>>(),

@@ -4,7 +4,7 @@ use cypher_rs::*;
 
 #[test]
 fn empty_query_errors() {
-    let q = Query { clauses: vec![] };
+    let q = Query::new(vec![]);
     assert_eq!(plan(&q), Err(PlanError::EmptyQuery));
 }
 
@@ -13,7 +13,7 @@ fn return_only_lowers_to_project_over_empty() {
     let q = parse("RETURN 1").unwrap();
     let p = plan(&q).unwrap();
     match p {
-        Plan::Project { input, exprs } => {
+        Plan::Project { input, exprs, .. } => {
             assert!(matches!(*input, Plan::Empty));
             assert_eq!(exprs.len(), 1);
         }

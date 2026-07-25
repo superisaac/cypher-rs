@@ -3,13 +3,16 @@
 // v0.11: WITH clause;
 // v0.12: STARTS WITH, ENDS WITH, CONTAINS string predicates;
 // v0.14: RETURN DISTINCT / WITH DISTINCT;
-// update clauses: CREATE, MERGE, SET, REMOVE, DELETE, UNWIND).
+// update clauses: CREATE, MERGE, SET, REMOVE, DELETE, UNWIND, FOREACH;
+// import clauses: LOAD CSV).
 //
 // Whitespace is skipped between non-atomic rules. Atomic rules
 // (those marked `@`) preserve internal whitespace.
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+COMMENT = _{ line_comment | block_comment }
+line_comment = { "//" ~ (!"\n" ~ ANY)* }
+block_comment = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 // --- keywords ---------------------------------------------------------
 //
@@ -17,68 +20,154 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
 // enforces a word boundary. Without the boundary check, `^"OR"` would
 // gleefully consume the "OR" prefix of `ORDER` and break the parse.
 
-kw_match    = @{ ^"MATCH"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_optional = @{ ^"OPTIONAL" ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_where    = @{ ^"WHERE"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_return   = @{ ^"RETURN"   ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_as       = @{ ^"AS"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_order    = @{ ^"ORDER"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_by       = @{ ^"BY"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_asc      = @{ ^"ASC"      ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_desc     = @{ ^"DESC"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_limit    = @{ ^"LIMIT"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_skip     = @{ ^"SKIP"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_and      = @{ ^"AND"      ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_or       = @{ ^"OR"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_not      = @{ ^"NOT"      ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_in       = @{ ^"IN"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_true     = @{ ^"TRUE"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_false    = @{ ^"FALSE"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_null     = @{ ^"NULL"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_is       = @{ ^"IS"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_with     = @{ ^"WITH"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_starts    = @{ ^"STARTS"   ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_ends      = @{ ^"ENDS"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_contains  = @{ ^"CONTAINS" ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_distinct  = @{ ^"DISTINCT" ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_create    = @{ ^"CREATE"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_merge     = @{ ^"MERGE"     ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_set       = @{ ^"SET"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_remove    = @{ ^"REMOVE"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_delete    = @{ ^"DELETE"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_detach    = @{ ^"DETACH"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_unwind    = @{ ^"UNWIND"    ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_on        = @{ ^"ON"        ~ !(ASCII_ALPHANUMERIC | "_") }
+ident_start = _{ ID_START | CONNECTOR_PUNCTUATION }
+ident_continue = _{ ID_CONTINUE | CURRENCY_SYMBOL }
+
+kw_match    = @{ ^"MATCH"    ~ !ident_continue }
+kw_optional = @{ ^"OPTIONAL" ~ !ident_continue }
+kw_where    = @{ ^"WHERE"    ~ !ident_continue }
+kw_return   = @{ ^"RETURN"   ~ !ident_continue }
+kw_as       = @{ ^"AS"       ~ !ident_continue }
+kw_order    = @{ ^"ORDER"    ~ !ident_continue }
+kw_by       = @{ ^"BY"       ~ !ident_continue }
+kw_asc      = @{ ^"ASC"      ~ !ident_continue }
+kw_desc     = @{ ^"DESC"     ~ !ident_continue }
+kw_limit    = @{ ^"LIMIT"    ~ !ident_continue }
+kw_skip     = @{ ^"SKIP"     ~ !ident_continue }
+kw_and      = @{ ^"AND"      ~ !ident_continue }
+kw_or       = @{ ^"OR"       ~ !ident_continue }
+kw_xor      = @{ ^"XOR"      ~ !ident_continue }
+kw_not      = @{ ^"NOT"      ~ !ident_continue }
+kw_in       = @{ ^"IN"       ~ !ident_continue }
+kw_true     = @{ ^"TRUE"     ~ !ident_continue }
+kw_false    = @{ ^"FALSE"    ~ !ident_continue }
+kw_null     = @{ ^"NULL"     ~ !ident_continue }
+kw_is       = @{ ^"IS"       ~ !ident_continue }
+kw_with     = @{ ^"WITH"     ~ !ident_continue }
+kw_starts    = @{ ^"STARTS"   ~ !ident_continue }
+kw_ends      = @{ ^"ENDS"     ~ !ident_continue }
+kw_contains  = @{ ^"CONTAINS" ~ !ident_continue }
+kw_distinct  = @{ ^"DISTINCT" ~ !ident_continue }
+kw_create    = @{ ^"CREATE"    ~ !ident_continue }
+kw_drop      = @{ ^"DROP"      ~ !ident_continue }
+kw_constraint = @{ ^"CONSTRAINT" ~ !ident_continue }
+kw_assert    = @{ ^"ASSERT"    ~ !ident_continue }
+kw_unique    = @{ ^"UNIQUE"    ~ !ident_continue }
+kw_merge     = @{ ^"MERGE"     ~ !ident_continue }
+kw_set       = @{ ^"SET"       ~ !ident_continue }
+kw_remove    = @{ ^"REMOVE"    ~ !ident_continue }
+kw_delete    = @{ ^"DELETE"    ~ !ident_continue }
+kw_detach    = @{ ^"DETACH"    ~ !ident_continue }
+kw_unwind    = @{ ^"UNWIND"    ~ !ident_continue }
+kw_foreach   = @{ ^"FOREACH"   ~ !ident_continue }
+kw_load      = @{ ^"LOAD"      ~ !ident_continue }
+kw_csv       = @{ ^"CSV"       ~ !ident_continue }
+kw_headers   = @{ ^"HEADERS"   ~ !ident_continue }
+kw_from      = @{ ^"FROM"      ~ !ident_continue }
+kw_fieldterminator = @{ ^"FIELDTERMINATOR" ~ !ident_continue }
+kw_on        = @{ ^"ON"        ~ !ident_continue }
+kw_using     = @{ ^"USING"     ~ !ident_continue }
+kw_periodic  = @{ ^"PERIODIC"  ~ !ident_continue }
+kw_commit    = @{ ^"COMMIT"    ~ !ident_continue }
+kw_explain   = @{ ^"EXPLAIN"   ~ !ident_continue }
+kw_profile   = @{ ^"PROFILE"   ~ !ident_continue }
+kw_cypher    = @{ ^"CYPHER"    ~ !ident_continue }
+kw_start     = @{ ^"START"     ~ !ident_continue }
+kw_node      = @{ ^"NODE"      ~ !ident_continue }
+kw_rel       = @{ ^"REL"       ~ !ident_continue }
+kw_relationship = @{ ^"RELATIONSHIP" ~ !ident_continue }
+kw_index     = @{ ^"INDEX"     ~ !ident_continue }
+kw_scan      = @{ ^"SCAN"      ~ !ident_continue }
+kw_join      = @{ ^"JOIN"      ~ !ident_continue }
+kw_call      = @{ ^"CALL"      ~ !ident_continue }
+kw_yield     = @{ ^"YIELD"     ~ !ident_continue }
+kw_case      = @{ ^"CASE"      ~ !ident_continue }
+kw_when      = @{ ^"WHEN"      ~ !ident_continue }
+kw_then      = @{ ^"THEN"      ~ !ident_continue }
+kw_else      = @{ ^"ELSE"      ~ !ident_continue }
+kw_end       = @{ ^"END"       ~ !ident_continue }
+kw_union     = @{ ^"UNION"     ~ !ident_continue }
+kw_all       = @{ ^"ALL"       ~ !ident_continue }
+kw_any       = @{ ^"ANY"       ~ !ident_continue }
+kw_none      = @{ ^"NONE"      ~ !ident_continue }
+kw_single    = @{ ^"SINGLE"    ~ !ident_continue }
+kw_filter    = @{ ^"FILTER"    ~ !ident_continue }
+kw_extract   = @{ ^"EXTRACT"   ~ !ident_continue }
+kw_reduce    = @{ ^"REDUCE"    ~ !ident_continue }
+kw_shortest_path = @{ ^"SHORTESTPATH" ~ !ident_continue }
+kw_all_shortest_paths = @{ ^"ALLSHORTESTPATHS" ~ !ident_continue }
 
 reserved_kw = _{
     kw_match | kw_optional | kw_where | kw_return | kw_as
     | kw_order | kw_by | kw_asc | kw_desc
     | kw_limit | kw_skip | kw_with
-    | kw_and | kw_or | kw_not | kw_in
+    | kw_and | kw_or | kw_xor | kw_not | kw_in
     | kw_true | kw_false | kw_null | kw_is
     | kw_starts | kw_ends | kw_contains | kw_distinct
-    | kw_create | kw_merge | kw_set | kw_remove | kw_delete | kw_detach | kw_unwind | kw_on
+    | kw_create | kw_drop | kw_constraint | kw_assert | kw_unique
+    | kw_merge | kw_set | kw_remove | kw_delete | kw_detach | kw_unwind | kw_foreach
+    | kw_load | kw_csv | kw_headers | kw_from | kw_fieldterminator | kw_on
+    | kw_periodic | kw_commit
+    | kw_explain
+    | kw_cypher
+    | kw_call | kw_yield
+    | kw_case | kw_when | kw_then | kw_else | kw_end
+    | kw_union | kw_all | kw_any | kw_none | kw_single
+    | kw_filter | kw_extract | kw_reduce
+    | kw_shortest_path | kw_all_shortest_paths
 }
 
-ident = @{
-    !reserved_kw ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")*
-}
+ident = @{ escaped_ident | (!reserved_kw ~ ident_start ~ ident_continue*) }
+escaped_ident = { "`" ~ ("``" | !"`" ~ ANY)* ~ "`" }
 
 // --- top --------------------------------------------------------------
 
-query = { SOI ~ clause+ ~ EOI }
+query = { SOI ~ statement ~ (";" ~ statement)* ~ ";"? ~ EOI }
+statement = { statement_option* ~ (schema_command | query_with_options) }
+statement_option = _{ explain_option | profile_option | cypher_option }
+explain_option = { kw_explain }
+profile_option = { kw_profile }
+cypher_option = { kw_cypher ~ (cypher_version ~ cypher_setting* | cypher_setting+) }
+cypher_version = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+cypher_setting = { ident ~ "=" ~ ident }
+query_with_options = _{ query_option* ~ query_body }
+query_option = { kw_using ~ kw_periodic ~ kw_commit ~ integer? }
+query_body = _{ clause+ ~ (union_clause ~ clause+)* }
+schema_command = _{ create_index_command | drop_index_command | create_constraint_command | drop_constraint_command }
+create_index_command = { kw_create ~ kw_index ~ kw_on ~ ":" ~ ident ~ "(" ~ ident ~ ("," ~ ident)* ~ ")" }
+drop_index_command = { kw_drop ~ kw_index ~ kw_on ~ ":" ~ ident ~ "(" ~ ident ~ ("," ~ ident)* ~ ")" }
+create_constraint_command = {
+    kw_create ~ kw_constraint ~ kw_on ~ (
+        node_constraint_target ~ kw_assert ~ expr ~ unique_constraint?
+        | relationship_constraint_target ~ kw_assert ~ expr
+    )
+}
+drop_constraint_command = {
+    kw_drop ~ kw_constraint ~ kw_on ~ (
+        node_constraint_target ~ kw_assert ~ expr ~ unique_constraint?
+        | relationship_constraint_target ~ kw_assert ~ expr
+    )
+}
+node_constraint_target = { "(" ~ ident ~ ":" ~ ident ~ ")" }
+relationship_constraint_target = { "()" ~ ("<-" | "-") ~ "[" ~ ident ~ ":" ~ ident ~ "]" ~ ("->" | "-") ~ "()" }
+unique_constraint = { kw_is ~ kw_unique }
 
-clause = _{ match_clause | create_clause | merge_clause | set_clause | remove_clause | delete_clause | unwind_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
+clause = _{ match_clause | create_clause | merge_clause | set_clause | remove_clause | delete_clause | unwind_clause | foreach_clause | load_csv_clause | call_clause | start_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
+union_clause = { kw_union ~ kw_all? }
 
-match_clause     = { optional_kw? ~ kw_match ~ pattern_list }
+match_clause     = { optional_kw? ~ kw_match ~ pattern_list ~ match_hint* }
 optional_kw      = { kw_optional }
+match_hint       = _{ using_index_hint | using_scan_hint | using_join_hint }
+using_index_hint = { kw_using ~ kw_index ~ ident ~ ":" ~ ident ~ "(" ~ ident ~ ")" }
+using_scan_hint  = { kw_using ~ kw_scan ~ ident ~ ":" ~ ident }
+using_join_hint  = { kw_using ~ kw_join ~ kw_on ~ ident ~ ("," ~ ident)* }
 where_clause     = { kw_where ~ expr }
 with_clause      = { kw_with ~ return_items }
 return_clause    = { kw_return ~ return_items }
 order_by_clause  = { kw_order ~ kw_by ~ order_items }
 limit_clause     = { kw_limit ~ expr }
 skip_clause      = { kw_skip ~ expr }
-create_clause    = { kw_create ~ pattern_list }
+create_clause    = { kw_create ~ kw_unique? ~ pattern_list }
 merge_clause     = { kw_merge ~ pattern ~ merge_action* }
 merge_action     = { kw_on ~ merge_action_kind ~ kw_set ~ set_items }
 merge_action_kind = { kw_match | kw_create }
@@ -86,6 +175,21 @@ set_clause       = { kw_set ~ set_items }
 remove_clause    = { kw_remove ~ remove_items }
 delete_clause    = { kw_detach? ~ kw_delete ~ expression_list }
 unwind_clause    = { kw_unwind ~ expr ~ kw_as ~ ident }
+foreach_clause   = { kw_foreach ~ "(" ~ ident ~ kw_in ~ expr ~ "|" ~ clause+ ~ ")" }
+load_csv_clause  = { kw_load ~ kw_csv ~ with_headers? ~ kw_from ~ expr ~ kw_as ~ ident ~ field_terminator? }
+with_headers     = { kw_with ~ kw_headers }
+field_terminator = { kw_fieldterminator ~ string_lit }
+call_clause      = { kw_call ~ procedure_name ~ call_arguments? ~ (kw_yield ~ yield_body)? ~ (kw_where ~ expr)? }
+start_clause     = { kw_start ~ start_point ~ ("," ~ start_point)* ~ (kw_where ~ expr)? }
+start_point      = { ident ~ "=" ~ start_entity ~ (":" ~ ident ~ "(" ~ (ident ~ "=" ~ start_lookup_value | start_lookup_value) ~ ")" | "(" ~ ("*" | integer ~ ("," ~ integer)*) ~ ")") }
+start_entity     = { kw_node | kw_rel | kw_relationship }
+start_lookup_value = { string_lit | param }
+procedure_name   = { ident ~ ("." ~ ident)* }
+call_arguments   = { "(" ~ expression_list? ~ ")" }
+yield_body       = { yield_items | yield_none }
+yield_items      = { yield_item ~ ("," ~ yield_item)* }
+yield_item       = { ident ~ (kw_as ~ ident)? }
+yield_none       = { "-" }
 
 expression_list = { expr ~ ("," ~ expr)* }
 
@@ -96,19 +200,31 @@ order_dir   = { kw_asc | kw_desc }
 // --- patterns ---------------------------------------------------------
 
 pattern_list = { pattern ~ ("," ~ pattern)* }
-pattern      = { node_pattern ~ rel_chain* }
+pattern      = { named_pattern | shortest_path_pattern | pattern_path }
+named_pattern = { ident ~ "=" ~ (shortest_path_pattern | pattern_path) }
+pattern_path = { node_pattern ~ rel_chain* }
+pattern_expression_path = { node_pattern ~ rel_chain+ }
+pattern_expression = { shortest_path_pattern | pattern_expression_path }
+shortest_path_pattern = { shortest_path_kind ~ "(" ~ pattern_path ~ ")" }
+shortest_path_kind = { kw_shortest_path | kw_all_shortest_paths }
 rel_chain    = { rel_pattern ~ node_pattern }
 
-node_pattern = { "(" ~ ident? ~ labels? ~ map_literal? ~ ")" }
+node_pattern = { "(" ~ ident? ~ labels? ~ pattern_properties? ~ ")" }
 labels       = { label+ }
 label        = { ":" ~ ident }
+pattern_properties = { map_literal | param }
 
 rel_pattern    = { rel_left | rel_right | rel_undirected }
 rel_left       = { "<-" ~ rel_detail? ~ "-" }
 rel_right      = { "-" ~ rel_detail? ~ "->" }
 rel_undirected = { "-" ~ rel_detail? ~ "-" }
-rel_detail     = { "[" ~ ident? ~ rel_types? ~ map_literal? ~ "]" }
+rel_detail     = { "[" ~ ident? ~ rel_types? ~ rel_range? ~ pattern_properties? ~ "]" }
 rel_types      = { ":" ~ ident ~ ("|" ~ ident)* }
+rel_range      = { "*" ~ (range_bounds | fixed_length)? }
+range_bounds   = { range_start? ~ ".." ~ range_end? }
+range_start    = { integer }
+range_end      = { integer }
+fixed_length   = { integer }
 
 // --- updates ----------------------------------------------------------
 
@@ -125,21 +241,25 @@ remove_labels      = { ident ~ label+ }
 
 // --- return -----------------------------------------------------------
 
-return_items = { kw_distinct? ~ return_item ~ ("," ~ return_item)* }
+return_items = { kw_distinct? ~ (return_all | return_item_list) }
+return_all   = { "*" ~ ("," ~ return_item)* }
+return_item_list = { return_item ~ ("," ~ return_item)* }
 return_item  = { expr ~ alias? }
 alias        = { kw_as ~ ident }
 
 // --- expressions ------------------------------------------------------
 
 expr     = { or_expr }
-or_expr  = { and_expr ~ (kw_or ~ and_expr)* }
+or_expr  = { xor_expr ~ (kw_or ~ xor_expr)* }
+xor_expr = { and_expr ~ (kw_xor ~ and_expr)* }
 and_expr = { not_expr ~ (kw_and ~ not_expr)* }
 not_expr = _{ not_op | cmp_expr }
 not_op   = { kw_not ~ not_expr }
 
-cmp_expr         = { add_expr ~ cmp_tail? }
+cmp_expr         = { add_expr ~ (rel_comparison_tail+ | cmp_tail)? }
 cmp_tail         = _{ cmp_op_tail | in_op_tail | starts_with_tail | ends_with_tail | contains_tail | is_not_null_tail | is_null_tail }
 cmp_op_tail      = { cmp_op ~ add_expr }
+rel_comparison_tail = { rel_cmp_op ~ add_expr }
 in_op_tail       = { kw_in ~ add_expr }
 starts_with_tail = { kw_starts ~ kw_with ~ add_expr }
 ends_with_tail   = { kw_ends ~ kw_with ~ add_expr }
@@ -147,29 +267,83 @@ contains_tail    = { kw_contains ~ add_expr }
 is_null_tail     = { kw_is ~ kw_null }
 is_not_null_tail = { kw_is ~ kw_not ~ kw_null }
 cmp_op           = { "<>" | "<=" | ">=" | "=" | "<" | ">" }
+rel_cmp_op       = { "<=" | ">=" | "<" | ">" }
 
 add_expr = { mul_expr ~ (add_op ~ mul_expr)* }
 add_op   = { "+" | "-" }
-mul_expr = { unary_expr ~ (mul_op ~ unary_expr)* }
+mul_expr = { pow_expr ~ (mul_op ~ pow_expr)* }
 mul_op   = { "*" | "/" | "%" }
+pow_expr = { unary_expr ~ (pow_op ~ pow_expr)? }
+pow_op   = { "^" }
 
-unary_expr   = _{ neg_op | postfix_expr }
+unary_expr   = _{ pos_op | neg_op | regex_expr }
+pos_op       = { "+" ~ unary_expr }
 neg_op       = { "-" ~ unary_expr }
-postfix_expr = { primary_expr ~ prop_access* }
+regex_expr   = { postfix_expr ~ (regex_op ~ postfix_expr)* }
+regex_op     = { "=~" }
+postfix_expr = { primary_expr ~ postfix_op* ~ label_predicate? }
+postfix_op   = _{ prop_access | collection_slice | collection_subscript | map_projection }
 prop_access  = { "." ~ ident }
+label_predicate = { label+ }
+collection_subscript = { "[" ~ expr ~ "]" }
+collection_slice     = { "[" ~ slice_start? ~ ".." ~ slice_end? ~ "]" }
+slice_start          = { expr }
+slice_end            = { expr }
+map_projection       = { "{" ~ (map_projection_item ~ ("," ~ map_projection_item)*)? ~ "}" }
+map_projection_item  = _{ map_projection_literal | map_projection_all | map_projection_property | map_projection_variable }
+map_projection_literal  = { ident ~ ":" ~ expr }
+map_projection_property = { "." ~ ident }
+map_projection_variable = { ident }
+map_projection_all      = { ".*" }
 
-primary_expr = _{ literal | list_lit | map_literal | param | paren_expr | var_ref }
+primary_expr = _{ literal | pattern_comprehension | list_comprehension | list_lit | map_literal | param | pattern_expression | paren_expr | case_expression | filter_expression | extract_expression | reduce_expression | collection_predicate | function_call | var_ref }
 paren_expr   = { "(" ~ expr ~ ")" }
+pattern_comprehension = { "[" ~ (ident ~ "=")? ~ pattern_expression_path ~ (kw_where ~ expr)? ~ "|" ~ expr ~ "]" }
+list_comprehension = { "[" ~ ident ~ kw_in ~ expr ~ (kw_where ~ expr)? ~ ("|" ~ expr)? ~ "]" }
 list_lit     = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 map_literal  = { "{" ~ (map_entry ~ ("," ~ map_entry)*)? ~ "}" }
 map_entry    = { ident ~ ":" ~ expr }
+function_call      = { function_name ~ "(" ~ function_call_body? ~ ")" }
+function_name      = { ident ~ ("." ~ ident)* }
+function_call_body = { kw_distinct? ~ (wildcard_argument | expression_list) }
+wildcard_argument  = { "*" }
+filter_expression  = { kw_filter ~ "(" ~ ident ~ kw_in ~ expr ~ (kw_where ~ expr)? ~ ")" }
+extract_expression = { kw_extract ~ "(" ~ ident ~ kw_in ~ expr ~ ("|" ~ expr)? ~ ")" }
+reduce_expression  = { kw_reduce ~ "(" ~ ident ~ "=" ~ expr ~ "," ~ ident ~ kw_in ~ expr ~ ("|" ~ expr)? ~ ")" }
+collection_predicate      = { collection_predicate_kind ~ "(" ~ ident ~ kw_in ~ expr ~ (kw_where ~ expr)? ~ ")" }
+collection_predicate_kind = { kw_all | kw_any | kw_none | kw_single }
+case_expression    = { kw_case ~ expr? ~ case_alternative+ ~ case_default? ~ kw_end }
+case_alternative   = { kw_when ~ expr ~ kw_then ~ expr }
+case_default       = { kw_else ~ expr }
 var_ref      = { ident }
 
-param = ${ "$" ~ ident }
+param = ${ ("$" ~ parameter_name) | ("{" ~ parameter_name ~ "}") }
+parameter_name = _{ ident | positional_parameter }
+positional_parameter = @{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
 
 literal    = _{ float | integer | string_lit | bool_lit | null_lit }
 bool_lit   = { kw_true | kw_false }
 null_lit   = { kw_null }
-integer    = @{ ASCII_DIGIT+ }
-float      = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-string_lit = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!"'" ~ ANY)* ~ "'" }
+integer    = @{ hex_integer | octal_integer | decimal_integer }
+hex_integer = { "0x" ~ ASCII_HEX_DIGIT+ }
+octal_integer = { "0" ~ ASCII_OCT_DIGIT+ }
+decimal_integer = { "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+float      = @{
+    (
+        (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? | "." ~ ASCII_DIGIT+)
+        ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
+    )
+    | ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+
+}
+string_lit = @{
+    "'" ~ (escape_sequence | !("'" | "\\") ~ ANY)* ~ "'"
+    | "\"" ~ (escape_sequence | !("\"" | "\\") ~ ANY)* ~ "\""
+}
+escape_sequence = {
+    "\\" ~ (
+        "a" | "b" | "f" | "n" | "r" | "t" | "v"
+        | "\\" | "'" | "\"" | "?"
+        | "u" ~ ASCII_HEX_DIGIT{4}
+        | "U" ~ ASCII_HEX_DIGIT{8}
+    )
+}

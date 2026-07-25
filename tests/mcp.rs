@@ -151,8 +151,34 @@ const Q_BAD_SYNTAX: &str = "MATCH (u:User WHERE";
 fn parse_ok_query_returns_clause_count_and_ast() {
     let v = call_text("cypher_parse", json!({ "query": Q_OK }));
     assert_eq!(v["ok"], true);
+    assert_eq!(v["statement_count"], 1);
+    assert_eq!(v["option_count"], 0);
     assert_eq!(v["clause_count"], 3);
     assert!(v["ast"].as_str().unwrap().contains("Match"));
+}
+
+#[test]
+fn parse_multiple_statements_returns_batch_counts() {
+    let v = call_text(
+        "cypher_parse",
+        json!({ "query": "RETURN 1; MATCH (n) RETURN n;" }),
+    );
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["statement_count"], 2);
+    assert_eq!(v["option_count"], 0);
+    assert_eq!(v["clause_count"], 3);
+}
+
+#[test]
+fn parse_reports_query_option_count() {
+    let v = call_text(
+        "cypher_parse",
+        json!({ "query": "USING PERIODIC COMMIT 500 RETURN 1" }),
+    );
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["statement_count"], 1);
+    assert_eq!(v["option_count"], 1);
+    assert_eq!(v["clause_count"], 1);
 }
 
 #[test]

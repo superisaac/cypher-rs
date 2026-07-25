@@ -105,7 +105,7 @@ fn sort_adds_n_log_n_term() {
 
 #[test]
 fn empty_query_has_zero_cost() {
-    let q = Query { clauses: vec![] };
+    let q = Query::new(vec![]);
     // plan() would error; build an Empty plan directly.
     let p = Plan::Empty;
     assert_eq!(estimate_cost(&p, &CardinalityCostModel::default()), 0.0);
