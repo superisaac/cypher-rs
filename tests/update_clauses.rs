@@ -88,6 +88,33 @@ fn parses_delete_and_detach_delete() {
 }
 
 #[test]
+fn parses_remove_properties_and_labels() {
+    let q = parse("MATCH (n), (m) REMOVE n.name, m.profile.rank, n:Old:Legacy").unwrap();
+    match &q.clauses[1] {
+        Clause::Remove(remove) => {
+            assert_eq!(remove.items.len(), 3);
+            assert!(matches!(
+                &remove.items[0],
+                RemoveItem::Property(Expr::Property { base, key })
+                    if key == "name" && matches!(base.as_ref(), Expr::Variable(v) if v == "n")
+            ));
+            assert!(matches!(
+                &remove.items[1],
+                RemoveItem::Property(Expr::Property { base, key })
+                    if key == "rank"
+                        && matches!(base.as_ref(), Expr::Property { key, .. } if key == "profile")
+            ));
+            assert!(matches!(
+                &remove.items[2],
+                RemoveItem::Labels { variable, labels }
+                    if variable == "n" && labels == &["Old", "Legacy"]
+            ));
+        }
+        other => panic!("expected REMOVE, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_unwind() {
     let q = parse("UNWIND [1, 2, 3] AS value RETURN value").unwrap();
     match &q.clauses[0] {
@@ -110,8 +137,13 @@ fn keywords_are_case_insensitive_and_have_boundaries() {
         parse("unwind $items as item return item").unwrap().clauses[0],
         Clause::Unwind(_)
     ));
+    assert!(matches!(
+        parse("match (n) remove n:old").unwrap().clauses[1],
+        Clause::Remove(_)
+    ));
     assert!(parse("CREATEd (n)").is_err());
     assert!(parse("DETACHDELETE n").is_err());
+    assert!(parse("MATCH (n) REMOVEd n.name").is_err());
 }
 
 #[test]
@@ -119,6 +151,9 @@ fn rejects_invalid_update_syntax() {
     assert!(parse("CREATE").is_err());
     assert!(parse("MERGE (n), (m)").is_err());
     assert!(parse("SET n").is_err());
+    assert!(parse("REMOVE").is_err());
+    assert!(parse("MATCH (n) REMOVE n").is_err());
+    assert!(parse("MATCH (n) REMOVE n.name,").is_err());
     assert!(parse("DELETE").is_err());
     assert!(parse("UNWIND [1, 2] value").is_err());
 }
@@ -127,4 +162,26 @@ fn rejects_invalid_update_syntax() {
 fn planner_reports_update_clauses_as_unsupported() {
     let q = parse("CREATE (n)").unwrap();
     assert_eq!(plan(&q), Err(PlanError::UnsupportedClause("CREATE")));
+}
+
+#[test]
+fn planner_reports_remove_as_unsupported() {
+    let q = parse("MATCH (n) REMOVE n.name").unwrap();
+    assert_eq!(plan(&q), Err(PlanError::UnsupportedClause("REMOVE")));
+}
+
+#[test]
+fn analyzes_remove_bindings_and_labels() {
+    struct OnlyCurrent;
+    impl Schema for OnlyCurrent {
+        fn has_label(&self, label: &str) -> bool {
+            label == "Current"
+        }
+    }
+
+    let q = parse("MATCH (n) REMOVE missing.name, n:Legacy").unwrap();
+    let report = analyze_with(&q, &OnlyCurrent);
+    let codes: Vec<_> = report.errors().map(|issue| issue.code).collect();
+    assert!(codes.contains(&"unbound-variable"));
+    assert!(codes.contains(&"unknown-label"));
 }

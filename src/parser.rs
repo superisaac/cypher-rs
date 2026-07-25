@@ -26,6 +26,7 @@ pub fn parse(input: &str) -> Result<Query, ParseError> {
             Rule::create_clause => clauses.push(Clause::Create(walk_create(inner)?)),
             Rule::merge_clause => clauses.push(Clause::Merge(walk_merge(inner)?)),
             Rule::set_clause => clauses.push(Clause::Set(walk_set(inner)?)),
+            Rule::remove_clause => clauses.push(Clause::Remove(walk_remove(inner)?)),
             Rule::delete_clause => clauses.push(Clause::Delete(walk_delete(inner)?)),
             Rule::unwind_clause => clauses.push(Clause::Unwind(walk_unwind(inner)?)),
             Rule::where_clause => clauses.push(Clause::Where(walk_clause_expr(inner)?)),
@@ -173,6 +174,39 @@ fn walk_property_target(pair: Pair<Rule>) -> Result<Expr, ParseError> {
         };
     }
     Ok(expr)
+}
+
+fn walk_remove(pair: Pair<Rule>) -> Result<RemoveClause, ParseError> {
+    let items = pair
+        .into_inner()
+        .find(|p| p.as_rule() == Rule::remove_items)
+        .ok_or_else(|| ParseError::Unexpected("remove: missing items".into()))?;
+    Ok(RemoveClause {
+        items: items
+            .into_inner()
+            .map(walk_remove_item)
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+fn walk_remove_item(pair: Pair<Rule>) -> Result<RemoveItem, ParseError> {
+    let item = first_inner(pair, "remove item")?;
+    match item.as_rule() {
+        Rule::property_target => Ok(RemoveItem::Property(walk_property_target(item)?)),
+        Rule::remove_labels => {
+            let mut inner = item.into_inner();
+            let variable = inner
+                .next()
+                .ok_or_else(|| ParseError::Unexpected("remove labels: missing variable".into()))?
+                .as_str()
+                .to_string();
+            let labels = inner
+                .map(|label| label.as_str().trim_start_matches(':').to_string())
+                .collect();
+            Ok(RemoveItem::Labels { variable, labels })
+        }
+        r => Err(unexpected("remove item", r)),
+    }
 }
 
 fn walk_delete(pair: Pair<Rule>) -> Result<DeleteClause, ParseError> {

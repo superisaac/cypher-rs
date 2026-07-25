@@ -163,6 +163,7 @@ fn check_clause<S: Schema + ?Sized>(
             }
         }
         Clause::Set(s) => check_set_items(&s.items, bindings, schema, issues),
+        Clause::Remove(r) => check_remove_items(&r.items, bindings, schema, issues),
         Clause::Delete(d) => {
             for expr in &d.expressions {
                 check_expr(expr, bindings, issues);
@@ -181,6 +182,31 @@ fn check_clause<S: Schema + ?Sized>(
             }
         }
         Clause::Limit(e) | Clause::Skip(e) => check_expr(e, bindings, issues),
+    }
+}
+
+fn check_remove_items<S: Schema + ?Sized>(
+    items: &[RemoveItem],
+    bindings: &HashSet<String>,
+    schema: &S,
+    issues: &mut Vec<SemIssue>,
+) {
+    for item in items {
+        match item {
+            RemoveItem::Property(property) => check_expr(property, bindings, issues),
+            RemoveItem::Labels { variable, labels } => {
+                check_expr(&Expr::Variable(variable.clone()), bindings, issues);
+                for label in labels {
+                    if !schema.has_label(label) {
+                        issues.push(SemIssue {
+                            severity: SemSeverity::Error,
+                            code: "unknown-label",
+                            message: format!("unknown label `{label}`"),
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 

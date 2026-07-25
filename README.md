@@ -31,7 +31,7 @@ What's missing is a pure-Rust, library-grade, MIT-licensed Cypher front-end with
 | Stage | What | Status |
 |---|---|---|
 | Lexer | tokens for openCypher 9 grammar | partial (v0.2) |
-| Parser | concrete syntax tree | partial (MATCH/OPTIONAL MATCH/WHERE/WITH/RETURN/ORDER BY/LIMIT/SKIP plus CREATE/MERGE/SET/DELETE/UNWIND) |
+| Parser | concrete syntax tree | partial (MATCH/OPTIONAL MATCH/WHERE/WITH/RETURN/ORDER BY/LIMIT/SKIP plus CREATE/MERGE/SET/REMOVE/DELETE/UNWIND) |
 | AST lowering | symbol table, variable binding | partial (v0.3) |
 | Semantic analysis | scope / label / rel-type checks | partial (v0.3 - type checks deferred) |
 | Logical plan | algebra: scan · expand · filter · project · agg | partial (v0.4-v0.5) |

@@ -11,6 +11,7 @@ pub enum Clause {
     Create(CreateClause),
     Merge(MergeClause),
     Set(SetClause),
+    Remove(RemoveClause),
     Delete(DeleteClause),
     Unwind(UnwindClause),
     Where(Expr),
@@ -65,6 +66,20 @@ pub enum SetItem {
         variable: String,
         value: Expr,
     },
+    Labels {
+        variable: String,
+        labels: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RemoveClause {
+    pub items: Vec<RemoveItem>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RemoveItem {
+    Property(Expr),
     Labels {
         variable: String,
         labels: Vec<String>,

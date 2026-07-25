@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Parser, AST, and semantic-analysis support for `REMOVE` property and label
+  items. The read-only logical planner reports `REMOVE` as unsupported.
 - Parser and AST support for `CREATE`, `MERGE` with `ON CREATE`/`ON MATCH`
   actions, all four `SET` item forms, `DELETE`/`DETACH DELETE`, and `UNWIND`.
 - Semantic checks for expressions and bindings in the new clauses. The

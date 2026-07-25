@@ -3,7 +3,7 @@
 // v0.11: WITH clause;
 // v0.12: STARTS WITH, ENDS WITH, CONTAINS string predicates;
 // v0.14: RETURN DISTINCT / WITH DISTINCT;
-// update clauses: CREATE, MERGE, SET, DELETE, UNWIND).
+// update clauses: CREATE, MERGE, SET, REMOVE, DELETE, UNWIND).
 //
 // Whitespace is skipped between non-atomic rules. Atomic rules
 // (those marked `@`) preserve internal whitespace.
@@ -44,6 +44,7 @@ kw_distinct  = @{ ^"DISTINCT" ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_create    = @{ ^"CREATE"    ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_merge     = @{ ^"MERGE"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_set       = @{ ^"SET"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_remove    = @{ ^"REMOVE"    ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_delete    = @{ ^"DELETE"    ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_detach    = @{ ^"DETACH"    ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_unwind    = @{ ^"UNWIND"    ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -56,7 +57,7 @@ reserved_kw = _{
     | kw_and | kw_or | kw_not | kw_in
     | kw_true | kw_false | kw_null | kw_is
     | kw_starts | kw_ends | kw_contains | kw_distinct
-    | kw_create | kw_merge | kw_set | kw_delete | kw_detach | kw_unwind | kw_on
+    | kw_create | kw_merge | kw_set | kw_remove | kw_delete | kw_detach | kw_unwind | kw_on
 }
 
 ident = @{
@@ -67,7 +68,7 @@ ident = @{
 
 query = { SOI ~ clause+ ~ EOI }
 
-clause = _{ match_clause | create_clause | merge_clause | set_clause | delete_clause | unwind_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
+clause = _{ match_clause | create_clause | merge_clause | set_clause | remove_clause | delete_clause | unwind_clause | where_clause | with_clause | return_clause | order_by_clause | limit_clause | skip_clause }
 
 match_clause     = { optional_kw? ~ kw_match ~ pattern_list }
 optional_kw      = { kw_optional }
@@ -82,6 +83,7 @@ merge_clause     = { kw_merge ~ pattern ~ merge_action* }
 merge_action     = { kw_on ~ merge_action_kind ~ kw_set ~ set_items }
 merge_action_kind = { kw_match | kw_create }
 set_clause       = { kw_set ~ set_items }
+remove_clause    = { kw_remove ~ remove_items }
 delete_clause    = { kw_detach? ~ kw_delete ~ expression_list }
 unwind_clause    = { kw_unwind ~ expr ~ kw_as ~ ident }
 
@@ -117,6 +119,9 @@ set_all_properties = { ident ~ "=" ~ expr }
 merge_properties   = { ident ~ "+=" ~ expr }
 set_labels         = { ident ~ label+ }
 property_target    = { var_ref ~ prop_access+ }
+remove_items       = { remove_item ~ ("," ~ remove_item)* }
+remove_item        = { property_target | remove_labels }
+remove_labels      = { ident ~ label+ }
 
 // --- return -----------------------------------------------------------
 

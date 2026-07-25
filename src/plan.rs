@@ -200,6 +200,7 @@ pub fn plan(query: &Query) -> Result<Plan, PlanError> {
             Clause::Create(_) => return Err(PlanError::UnsupportedClause("CREATE")),
             Clause::Merge(_) => return Err(PlanError::UnsupportedClause("MERGE")),
             Clause::Set(_) => return Err(PlanError::UnsupportedClause("SET")),
+            Clause::Remove(_) => return Err(PlanError::UnsupportedClause("REMOVE")),
             Clause::Delete(_) => return Err(PlanError::UnsupportedClause("DELETE")),
             Clause::Unwind(_) => return Err(PlanError::UnsupportedClause("UNWIND")),
         }
