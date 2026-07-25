@@ -1,0 +1,3 @@
+[submodule "vendors/libcypher-parser"]
+	path = vendors/libcypher-parser
+	url = https://github.com/cleishm/libcypher-parser.git
