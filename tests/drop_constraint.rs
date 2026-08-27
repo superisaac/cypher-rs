@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_unique_node_constraint_reference_form() {

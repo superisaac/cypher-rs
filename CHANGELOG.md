@@ -6,14 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-27
+
+### Changed
+- The crates.io package is published as `cypher-rs-zk`.
+- The Rust library target is renamed from `cypher_rs` to `cypher_rs_zk`.
+
+## [1.0.0] - 2026-07-25
+
+### Changed
+- Logical plans now represent all parsed Cypher operations, including update
+  clauses, `UNWIND`, `FOREACH`, legacy `START`, indexes, and constraints.
+
 ### Added
 - Parser, AST, and semantic-analysis support for `REMOVE` property and label
-  items. The read-only logical planner reports `REMOVE` as unsupported.
+  items.
 - Parser and AST support for `CREATE`, `MERGE` with `ON CREATE`/`ON MATCH`
   actions, all four `SET` item forms, `DELETE`/`DETACH DELETE`, and `UNWIND`.
-- Semantic checks for expressions and bindings in the new clauses. The
-  read-only logical planner reports them as unsupported instead of producing
-  an incomplete plan.
+- Semantic checks for expressions and bindings in the new clauses.
 - MCP (Model Context Protocol) server: new `cypher-mcp` binary and
   `pub mod mcp` module gated behind a new `mcp` Cargo feature.
   Library users keep the lean dep tree (no `serde_json`); MCP users
@@ -196,11 +206,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - 18 integration tests + 1 doctest. CI: build + test +
   `clippy -D warnings` + `fmt --check`.
 
-[Unreleased]: https://github.com/erphq/cypher-rs/compare/v0.7.0...HEAD
-[0.7.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.7.0
-[0.6.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.6.0
-[0.5.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.5.0
-[0.4.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.4.0
-[0.3.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.3.0
-[0.2.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.2.0
-[0.1.0]: https://github.com/erphq/cypher-rs/releases/tag/v0.1.0
+[Unreleased]: https://github.com/superisaac/cypher-rs/compare/cypher-rs-zk-v1.1.0...HEAD
+[1.1.0]: https://github.com/superisaac/cypher-rs/releases/tag/cypher-rs-zk-v1.1.0
+[1.0.0]: https://github.com/superisaac/cypher-rs/releases/tag/1.0.0
+[0.7.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.7.0
+[0.6.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.6.0
+[0.5.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.5.0
+[0.4.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.4.0
+[0.3.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.3.0
+[0.2.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.2.0
+[0.1.0]: https://github.com/superisaac/cypher-rs/releases/tag/v0.1.0

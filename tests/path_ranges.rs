@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn first_pattern(query: &str) -> Pattern {
     let query = parse(query).unwrap();

@@ -4,7 +4,7 @@
 //!   3. Property maps on rel patterns: `MATCH (u)-[:KNOWS {since: 2020}]->(v)`.
 //!   4. Plan lowering: property maps desugar into `Filter` operators.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn pq(src: &str) -> Plan {
     let q = parse(src).unwrap();

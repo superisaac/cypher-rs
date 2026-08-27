@@ -1,6 +1,6 @@
 //! v0.7 cost-model tests.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn pq(src: &str) -> Plan {
     let q = parse(src).unwrap();

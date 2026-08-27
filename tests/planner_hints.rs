@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn first_match(input: &str) -> MatchClause {
     let query = parse(input).unwrap();

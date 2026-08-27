@@ -6,11 +6,10 @@
 
 **Lex. Parse. Validate. Plan. Storage-agnostic.**
 
-![tests](https://img.shields.io/badge/tests-130%20passing-green)
-
+[![crates.io](https://img.shields.io/crates/v/cypher-rs-zk.svg)](https://crates.io/crates/cypher-rs-zk)
+[![docs.rs](https://docs.rs/cypher-rs-zk/badge.svg)](https://docs.rs/cypher-rs-zk)
+[![CI](https://github.com/superisaac/cypher-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/superisaac/cypher-rs/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![status](https://img.shields.io/badge/status-pre--v0-orange.svg)](#roadmap)
-[![rust](https://img.shields.io/badge/rust-stable-orange.svg)](#install)
 
 </div>
 
@@ -42,23 +41,45 @@ What's missing is a pure-Rust, library-grade, MIT-licensed Cypher front-end with
 Not in scope: physical plan, storage adapter, executor, network
 protocol, server.
 
+## ✦ Install
+
+The crates.io package is named `cypher-rs-zk`; Rust code imports its
+library as `cypher_rs_zk`:
+
+```bash
+cargo add cypher-rs-zk
+```
+
+Or add it directly to `Cargo.toml`:
+
+```toml
+[dependencies]
+cypher-rs-zk = "1.1.0"
+```
+
+The minimum supported Rust version is 1.74.
+
 ## ✦ Usage
 
 ```rust
-use cypher_rs::{parse, lower, plan, Schema};
+use cypher_rs_zk::{analyze, optimize, parse, plan};
 
-let q = "
-    MATCH (u:User)-[:FOLLOWS]->(f:User)
-    WHERE u.id = $uid
-    RETURN f.name AS name, f.created_at AS joined
-    ORDER BY joined DESC
-    LIMIT 10
-";
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let query = parse(
+        "MATCH (u:User)-[:FOLLOWS]->(f:User) \
+         WHERE u.id = $uid \
+         RETURN f.name AS name, f.created_at AS joined \
+         ORDER BY joined DESC \
+         LIMIT 10",
+    )?;
 
-let cst = parse(q)?;                       // concrete syntax tree
-let ast = lower(&cst)?;                    // typed AST with bindings
-let lp  = plan(&ast, &Schema::infer())?;   // logical plan
-println!("{lp:#}");
+    let analysis = analyze(&query);
+    assert!(!analysis.has_errors());
+
+    let logical_plan = optimize(plan(&query)?);
+    println!("{logical_plan}");
+    Ok(())
+}
 ```
 
 Output (simplified):
@@ -78,7 +99,13 @@ Plug your executor under that and you have a Cypher engine.
 
 `cypher-rs` ships a [Model Context Protocol](https://modelcontextprotocol.io/) server so any MCP-compatible agent ([Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://cursor.sh/), [Windsurf](https://codeium.com/windsurf), [Continue](https://continue.dev/), …) can call the front-end as tools. Useful for "is this query valid? what's its plan? what does the optimizer change? what does it cost?" without hand-rolling a CLI.
 
-The server is gated behind the `mcp` Cargo feature so the library's dep tree stays lean by default. Build the binary once:
+The server is gated behind the `mcp` Cargo feature so the library's dep tree stays lean by default. Install it from crates.io:
+
+```bash
+cargo install cypher-rs-zk --features mcp --bin cypher-mcp
+```
+
+Or build the binary from a source checkout:
 
 ```bash
 cargo build --release --features mcp --bin cypher-mcp

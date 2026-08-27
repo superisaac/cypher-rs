@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_periodic_commit_with_limit() {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn return_clause(input: &str) -> ReturnClause {
     let query = parse(input).unwrap();

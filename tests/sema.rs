@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn collects_bindings_from_node_patterns() {

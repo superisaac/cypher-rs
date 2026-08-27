@@ -11,7 +11,7 @@
 //! schema metadata for variables, properties, parameters, and functions.
 //!
 //! ```
-//! use cypher_rs::parse;
+//! use cypher_rs_zk::parse;
 //! let q = parse("MATCH (u:User) WHERE u.id = $uid RETURN u.name").unwrap();
 //! assert_eq!(q.clauses.len(), 3);
 //! ```

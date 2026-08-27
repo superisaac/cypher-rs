@@ -1,4 +1,4 @@
-use cypher_rs::{parse, plan, Clause, Plan, QueryOption};
+use cypher_rs_zk::{parse, plan, Clause, Plan, QueryOption};
 
 #[test]
 fn parses_version_and_settings() {

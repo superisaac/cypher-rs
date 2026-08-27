@@ -1,4 +1,4 @@
-use cypher_rs::{parse, plan};
+use cypher_rs_zk::{parse, plan};
 
 #[test]
 fn every_parsed_clause_family_has_a_planning_path() {

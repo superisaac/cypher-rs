@@ -1,20 +1,29 @@
 [package]
-name = "cypher-rs"
-version = "1.0.0"
+name = "cypher-rs-zk"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.74"
+authors = ["Zeng Ke <superisaac.ke@gmail.com>"]
 description = "openCypher front-end in Rust: lexer, parser, sema, plan, optimize, cost. Storage-agnostic."
 license = "MIT"
-repository = "https://github.com/erphq/cypher-rs"
-homepage = "https://www.erp.ai"
-documentation = "https://docs.rs/cypher-rs"
+repository = "https://github.com/superisaac/cypher-rs"
+documentation = "https://docs.rs/cypher-rs-zk"
 readme = "README.md"
 keywords = ["cypher", "opencypher", "graph-database", "parser", "query-language"]
 categories = ["parser-implementations", "database"]
+include = [
+    "/src/**",
+    "/examples/**",
+    "/tests/**",
+    "/docs/**",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+]
 
 [dependencies]
-pest = "2.7"
-pest_derive = "2.7"
+pest = "~2.7.15"
+pest_derive = "~2.7.15"
 thiserror = "1.0"
 serde_json = { version = "1.0", optional = true }
 
@@ -27,10 +36,13 @@ default = []
 mcp = ["dep:serde_json"]
 
 [lib]
-name = "cypher_rs"
+name = "cypher_rs_zk"
 path = "src/lib.rs"
 
 [[bin]]
 name = "cypher-mcp"
 path = "src/bin/cypher-mcp.rs"
 required-features = ["mcp"]
+
+[package.metadata.docs.rs]
+all-features = true

@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn parse_plan(src: &str) -> Plan {
     let q = parse(src).unwrap();

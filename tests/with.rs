@@ -1,6 +1,6 @@
 //! Tests for the WITH clause (pipeline break between query parts).
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_simple_with() {

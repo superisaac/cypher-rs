@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn return_exprs(query: &str) -> Vec<Expr> {
     let query = parse(query).unwrap();

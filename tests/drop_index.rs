@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_drop_index_reference_form() {

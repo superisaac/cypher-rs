@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::{
+use cypher_rs_zk::{
     estimate, optimize, output_columns, parse, plan, required_input_columns, CardinalityCostModel,
     Plan, StartEntity, StartLookup,
 };

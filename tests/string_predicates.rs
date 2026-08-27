@@ -1,7 +1,7 @@
 //! Tests for STARTS WITH, ENDS WITH, and CONTAINS string predicates.
 //! These are part of the openCypher spec and help reach TCK conformance.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_starts_with() {

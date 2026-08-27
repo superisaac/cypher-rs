@@ -2,7 +2,7 @@
 //! Covers: OR, Neq/Lte/Gte/Lt comparisons, Div/Mod/Sub arithmetic,
 //! unary negation, NOT over a binary, and double-quoted string literals.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_or_in_where() {

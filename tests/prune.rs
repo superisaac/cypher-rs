@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn pq(src: &str) -> Plan {
     plan(&parse(src).unwrap()).unwrap()

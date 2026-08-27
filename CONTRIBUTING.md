@@ -7,7 +7,7 @@ It has no storage, no executor, and no external services to mock.
 ## Quickstart
 
 ```sh
-git clone https://github.com/erphq/cypher-rs
+git clone https://github.com/superisaac/cypher-rs
 cd cypher-rs
 cargo build
 cargo test
@@ -72,5 +72,5 @@ Tests for new features should cover both the no-op default and a
 
 ## Releasing
 
-Releases are tagged manually; there is no crates.io publish workflow
-yet (planned for v0.10).
+Releases are published manually. Follow the checks and publication steps in
+[`RELEASING.md`](./RELEASING.md).

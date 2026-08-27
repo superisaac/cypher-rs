@@ -1,4 +1,4 @@
-use cypher_rs::{analyze, parse, plan, Clause, Plan};
+use cypher_rs_zk::{analyze, parse, plan, Clause, Plan};
 
 #[test]
 fn parses_reference_create_unique_form() {

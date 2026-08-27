@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_node_and_relationship_property_parameters() {

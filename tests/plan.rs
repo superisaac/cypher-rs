@@ -1,6 +1,6 @@
 //! v0.4 logical plan lowering tests.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn empty_query_errors() {

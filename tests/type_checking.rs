@@ -1,4 +1,4 @@
-use cypher_rs::{
+use cypher_rs_zk::{
     analyze, analyze_with, infer_expression_type, infer_expression_type_with, parse, Clause,
     CypherType, Expr, FunctionSignature, Schema,
 };

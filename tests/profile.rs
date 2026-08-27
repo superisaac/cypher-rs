@@ -1,4 +1,4 @@
-use cypher_rs::{parse, plan, Plan, QueryOption};
+use cypher_rs_zk::{parse, plan, Plan, QueryOption};
 
 #[test]
 fn parses_profile_and_preserves_statement_options() {
@@ -13,7 +13,7 @@ fn profile_prefixes_schema_commands() {
     assert_eq!(query.options, [QueryOption::Profile]);
     assert!(matches!(
         query.clauses[0],
-        cypher_rs::Clause::SchemaCommand(_)
+        cypher_rs_zk::Clause::SchemaCommand(_)
     ));
 }
 
@@ -39,15 +39,15 @@ fn profile_precedes_periodic_commit() {
 fn profile_is_transparent_to_plan_analyses() {
     let query = parse("PROFILE MATCH (n) RETURN n").unwrap();
     let planned = plan(&query).unwrap();
-    let optimized = cypher_rs::optimize(planned.clone());
+    let optimized = cypher_rs_zk::optimize(planned.clone());
     assert_eq!(
-        cypher_rs::output_columns(&planned),
-        cypher_rs::output_columns(&optimized)
+        cypher_rs_zk::output_columns(&planned),
+        cypher_rs_zk::output_columns(&optimized)
     );
-    let model = cypher_rs::CardinalityCostModel::default();
+    let model = cypher_rs_zk::CardinalityCostModel::default();
     assert_eq!(
-        cypher_rs::estimate_cost(&planned, &model),
-        cypher_rs::estimate_cost(&optimized, &model)
+        cypher_rs_zk::estimate_cost(&planned, &model),
+        cypher_rs_zk::estimate_cost(&optimized, &model)
     );
 }
 

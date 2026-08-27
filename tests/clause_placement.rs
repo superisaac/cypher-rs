@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn accepts_match_and_with_predicates_in_their_valid_positions() {

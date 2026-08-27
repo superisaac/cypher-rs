@@ -3,7 +3,7 @@
 //! Built with `cargo build --release --features mcp --bin cypher-mcp`.
 //! See `src/mcp.rs` for the protocol layer and the tool surface.
 
-use cypher_rs::mcp;
+use cypher_rs_zk::mcp;
 use std::io::{self, BufRead, Write};
 
 fn main() {

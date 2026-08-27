@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn return_expr(query: &str) -> Expr {
     let query = parse(query).unwrap();

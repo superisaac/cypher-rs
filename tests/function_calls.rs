@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 use std::collections::HashSet;
 
 fn first_return_expr(query: &str) -> Expr {

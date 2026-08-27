@@ -3,7 +3,7 @@
 //! SKIP was added in v0.1 but has no dedicated test file. The only prior
 //! coverage is the kitchen-sink parse test in grammar_v0_2.rs.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn parse_plan(src: &str) -> Plan {
     let q = parse(src).unwrap();

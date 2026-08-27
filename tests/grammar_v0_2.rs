@@ -1,6 +1,6 @@
 //! v0.2 grammar growth: ORDER BY · OPTIONAL MATCH · list literals · IN.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_optional_match() {

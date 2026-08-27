@@ -1,6 +1,6 @@
-use cypher_rs::{analyze, parse, plan, Clause, Expr, Literal, Plan, StartEntity, StartLookup};
+use cypher_rs_zk::{analyze, parse, plan, Clause, Expr, Literal, Plan, StartEntity, StartLookup};
 
-fn start_clause(source: &str) -> cypher_rs::StartClause {
+fn start_clause(source: &str) -> cypher_rs_zk::StartClause {
     let query = parse(source).unwrap();
     let Clause::Start(start) = &query.clauses[0] else {
         panic!("expected START");

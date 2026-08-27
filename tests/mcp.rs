@@ -6,7 +6,7 @@
 
 #![cfg(feature = "mcp")]
 
-use cypher_rs::mcp::handle_request;
+use cypher_rs_zk::mcp::handle_request;
 use serde_json::{json, Value};
 
 fn req(method: &str, id: u64, params: Value) -> String {

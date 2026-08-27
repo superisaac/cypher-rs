@@ -1,4 +1,4 @@
-use cypher_rs::*;
+use cypher_rs_zk::*;
 fn main() {
     let q = parse(
         "MATCH (u:User)-[:FOLLOWS]->(f:User) \

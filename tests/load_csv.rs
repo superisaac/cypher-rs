@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 #[test]
 fn parses_load_csv_reference_form() {

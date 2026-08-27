@@ -1,6 +1,6 @@
 //! v0.6 optimizer tests.
 
-use cypher_rs::*;
+use cypher_rs_zk::*;
 
 fn parse_plan_optimize(src: &str) -> Plan {
     let q = parse(src).unwrap();
